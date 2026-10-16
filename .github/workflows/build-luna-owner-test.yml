@@ -1,0 +1,30 @@
+name: Build Luna Owner Test EXE
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Luna.OwnerTest.csproj'
+      - 'source/**'
+      - 'assets/**'
+      - '.github/workflows/build-luna-owner-test.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build portable Windows EXE
+        shell: pwsh
+        run: msbuild Luna.OwnerTest.csproj /nologo /p:Configuration=Release /p:RestorePackages=false
+      - name: SHA256
+        shell: pwsh
+        run: Get-FileHash bin/Release/Luna.OwnerTest.exe -Algorithm SHA256 | Format-List
+      - name: Package EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: Luna-Owner-Test-Windows-EXE
+          path: bin/Release/Luna.OwnerTest.exe
+          if-no-files-found: error
+          retention-days: 7
