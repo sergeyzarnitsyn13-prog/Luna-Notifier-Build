@@ -18,6 +18,9 @@ jobs:
       - name: Build portable Windows EXE
         shell: pwsh
         run: msbuild Luna.OwnerTest.csproj /nologo /p:Configuration=Release /p:RestorePackages=false
+      - name: Validate WPF bubble
+        shell: pwsh
+        run: powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File scripts/Validate-Bubble.ps1
       - name: SHA256
         shell: pwsh
         run: Get-FileHash bin/Release/Luna.OwnerTest.exe -Algorithm SHA256 | Format-List
