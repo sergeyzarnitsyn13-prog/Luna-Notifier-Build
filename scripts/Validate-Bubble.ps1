@@ -7,7 +7,7 @@ try {
   $xamlPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'source\SpeechBubble.Lite.xaml'
   $xaml = [System.IO.File]::ReadAllText($xamlPath, [System.Text.Encoding]::UTF8)
   $window = [System.Windows.Markup.XamlReader]::Parse($xaml)
-  foreach ($name in @('BubbleRoot','BubbleOutline','TaskText','DismissButton')) {
+  foreach ($name in @('BubbleRoot','BubbleOutline','AmbientGlow','MoonHalo','TitleText','TaskText','DismissButton')) {
     $element = $window.FindName($name)
     if ($null -eq $element) { throw "XAML name cannot be resolved: $name" }
     Write-Host "Found $name : $($element.GetType().FullName)"
@@ -46,6 +46,8 @@ try {
   if ($visibleWindow.ActualWidth -lt 150 -or $visibleWindow.ActualHeight -lt 60) { throw 'Bubble window has unexpectedly small dimensions' }
   $visibleWindow.Close()
   $app.Shutdown()
+  if ($null -eq $visibleWindow.FindName('MoonHalo') -or $null -eq $visibleWindow.FindName('AmbientGlow')) { throw 'Missing materialization elements' }
+  Write-Host "MoonGlow animation elements PASSED"
   Write-Host "Compiled bubble ShowAnimated PASSED"
   Write-Host "WPF bubble XAML validation PASSED"
   $window.Close()

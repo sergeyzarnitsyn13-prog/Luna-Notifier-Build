@@ -34,35 +34,35 @@
   </Style>
  </Window.Resources>
 
- <Grid x:Name="BubbleRoot" Margin="16" Opacity="0" ClipToBounds="False">
-  <Grid.CacheMode><BitmapCache/></Grid.CacheMode>
-  <Grid.RenderTransform><ScaleTransform ScaleX="0.08" ScaleY="0.08"/></Grid.RenderTransform>
-
-  <!-- One geometry is shared by the body and tail. Layering creates soft moon halo, not glass. -->
-  <Canvas IsHitTestVisible="False" ClipToBounds="False">
-   <!-- soft depth shadow -->
-   <Path Data="{Binding Data, ElementName=BubbleOutline}" Fill="#F4FAFF" IsHitTestVisible="False">
-    <Path.Effect><DropShadowEffect Color="#305A82" BlurRadius="18" ShadowDepth="4" Opacity="0.14"/></Path.Effect>
-   </Path>
-   <!-- wide atmospheric halo -->
-   <Path Data="{Binding Data, ElementName=BubbleOutline}" Stroke="#87D6FF" StrokeThickness="2.40" IsHitTestVisible="False">
-    <Path.Effect><DropShadowEffect Color="#56CAFF" BlurRadius="29" ShadowDepth="0" Opacity="0.92"/></Path.Effect>
-   </Path>
-   <!-- luminous rim below the white edge -->
-   <Path Data="{Binding Data, ElementName=BubbleOutline}" Stroke="#C8F4FF" StrokeThickness="0.98" IsHitTestVisible="False" Opacity="0.94"/>
-   <!-- actual opaque moon-white body -->
-   <Path x:Name="BubbleOutline" Fill="{StaticResource MoonWhiteSurface}" Stroke="#D9F2FF" StrokeThickness="0.78" IsHitTestVisible="False"/>
-  </Canvas>
-
-  <Grid Margin="18,13,18,26">
-   <Grid.RowDefinitions><RowDefinition Height="27"/><RowDefinition Height="Auto"/><RowDefinition Height="0"/></Grid.RowDefinitions>
-   <Grid>
-    <TextBlock Text="Luna" FontSize="16" FontWeight="SemiBold" Foreground="#123E74" VerticalAlignment="Center"/>
-    <Button x:Name="DismissButton" Width="22" Height="22" Padding="6" HorizontalAlignment="Right" Style="{StaticResource QuietAction}" ToolTip="Закрыть" AutomationProperties.Name="Закрыть реплику">
-     <Path Data="M 1,1 L 9,9 M 9,1 L 1,9" Stroke="#748EAE" StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="9" Height="9" Stretch="Uniform"/>
-    </Button>
+ <Grid x:Name="MoonScene" Margin="16" ClipToBounds="False">
+  <!-- The atmospheric bloom appears first, before the card takes shape. -->
+  <Ellipse x:Name="AmbientGlow" Fill="#8DD6FF" Opacity="0" Margin="13,5" IsHitTestVisible="False">
+   <Ellipse.Effect><BlurEffect Radius="30" RenderingBias="Performance"/></Ellipse.Effect>
+  </Ellipse>
+  <Grid x:Name="BubbleRoot" Opacity="0" ClipToBounds="False" RenderTransformOrigin="0.70,0.75">
+   <Grid.CacheMode><BitmapCache/></Grid.CacheMode>
+   <Grid.RenderTransform><ScaleTransform ScaleX="0.94" ScaleY="0.94"/></Grid.RenderTransform>
+   <!-- The shape has no disconnected tail: this version does not use a tray anchor. -->
+   <Canvas IsHitTestVisible="False" ClipToBounds="False">
+    <Path Data="{Binding Data, ElementName=BubbleOutline}" Fill="#F4FAFF" IsHitTestVisible="False">
+     <Path.Effect><DropShadowEffect Color="#305A82" BlurRadius="18" ShadowDepth="3" Opacity="0.14"/></Path.Effect>
+    </Path>
+    <Path x:Name="MoonHalo" Data="{Binding Data, ElementName=BubbleOutline}" Stroke="#8BDFFF" StrokeThickness="1.75" Opacity="0.70" IsHitTestVisible="False">
+     <Path.Effect><DropShadowEffect Color="#56C7FF" BlurRadius="26" ShadowDepth="0" Opacity="0.72"/></Path.Effect>
+    </Path>
+    <Path Data="{Binding Data, ElementName=BubbleOutline}" Stroke="#D9F6FF" StrokeThickness="0.85" Opacity="0.85" IsHitTestVisible="False"/>
+    <Path x:Name="BubbleOutline" Fill="{StaticResource MoonWhiteSurface}" Stroke="#CFEFFF" StrokeThickness="0.88" IsHitTestVisible="False"/>
+   </Canvas>
+   <Grid Margin="18,14,18,16">
+    <Grid.RowDefinitions><RowDefinition Height="27"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Grid>
+     <TextBlock x:Name="TitleText" Text="Luna" Opacity="0" FontSize="16" FontWeight="SemiBold" Foreground="#123E74" VerticalAlignment="Center"/>
+     <Button x:Name="DismissButton" Opacity="0" Width="22" Height="22" Padding="6" HorizontalAlignment="Right" Style="{StaticResource QuietAction}" ToolTip="Закрыть" AutomationProperties.Name="Закрыть реплику">
+      <Path Data="M 1,1 L 9,9 M 9,1 L 1,9" Stroke="#748EAE" StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="9" Height="9" Stretch="Uniform"/>
+     </Button>
+    </Grid>
+    <TextBlock x:Name="TaskText" Grid.Row="1" Opacity="0" Margin="0,5,0,0" TextWrapping="Wrap" TextTrimming="None" FontFamily="Segoe UI" FontSize="13" LineHeight="19" LineStackingStrategy="BlockLineHeight" Foreground="#214162"/>
    </Grid>
-   <TextBlock x:Name="TaskText" Grid.Row="1" Margin="0,5,0,0" TextWrapping="Wrap" TextTrimming="None" FontFamily="Segoe UI" FontSize="13" LineHeight="19" LineStackingStrategy="BlockLineHeight" Foreground="#214162"/>
   </Grid>
  </Grid>
 </Window>

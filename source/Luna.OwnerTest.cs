@@ -235,9 +235,16 @@ internal sealed class LunaBubble
     private readonly Window window;
     private readonly Grid root;
     private readonly ScaleTransform scale;
+    private readonly Ellipse ambientGlow;
+    private readonly WpfPath halo;
+    private readonly TextBlock title;
+    private readonly TextBlock text;
+    private readonly Button dismiss;
     private readonly Action onDismiss;
     private readonly DispatcherTimer timer;
+    private DispatcherTimer settleTimer;
     private bool closing;
+
     internal LunaBubble(LunaMoon moon, AlertItem item, Action closed) {
         onDismiss=closed;
         using(var sr=new StreamReader(Embed.Get("SpeechBubbleXaml")))
@@ -245,73 +252,139 @@ internal sealed class LunaBubble
         window.MaxHeight=320;
         root=(Grid)window.FindName("BubbleRoot");
         scale=(ScaleTransform)root.RenderTransform;
-        var text=(TextBlock)window.FindName("TaskText");
+        ambientGlow=(Ellipse)window.FindName("AmbientGlow");
+        halo=(WpfPath)window.FindName("MoonHalo");
+        title=(TextBlock)window.FindName("TitleText");
+        text=(TextBlock)window.FindName("TaskText");
+        dismiss=(Button)window.FindName("DismissButton");
         text.Text=(item.Title.Length>0 ? item.Title+"\n" : "")+item.Body;
-        ((Button)window.FindName("DismissButton")).Click+=(s,e)=>Close();
-        window.Closed+=(s,e)=> {timer.Stop();onDismiss();};
-        timer=new DispatcherTimer{Interval=TimeSpan.FromSeconds(10)};
+        dismiss.Click+=(s,e)=>Close();
+        timer=new DispatcherTimer { Interval=TimeSpan.FromSeconds(10) };
         timer.Tick+=(s,e)=>Close();
-        window.Loaded+=(s,e)=>Position(moon);
+        window.Closed+=(s,e)=>{
+            timer.Stop();
+            if(settleTimer!=null)settleTimer.Stop();
+            onDismiss();
+        };
+        window.Loaded+=(s,e)=>Position();
         moon.Pulse();
     }
-    private void Position(LunaMoon moon) {
-        // WPF Window.Left/Top are device-independent pixels (DIPs).
-        // WinForms cursor/working-area values may use physical pixels at 125%+ DPI.
-        // Never mix those coordinate systems: anchor entirely within WPF work area.
+
+    private void Position() {
+        // Position with WPF DIPs only. WinForms pixels break at 125% scaling.
         window.UpdateLayout();
-        var work = SystemParameters.WorkArea;
-        double ww = window.Width;
-        double wh = Math.Max(80, window.ActualHeight > 1 ? window.ActualHeight : 150);
-        double margin = 18;
-        window.Left = Math.Max(work.Left + margin, work.Right - ww - margin);
-        window.Top = Math.Max(work.Top + margin, work.Bottom - wh - margin);
-        double rw = Math.Max(80,ww - 32),rh = Math.Max(80,wh - 32);
-        double tip = rw - 55;
-        root.RenderTransformOrigin = new Point(tip/rw,(rh-2)/rh);
-        ((WpfPath)window.FindName("BubbleOutline")).Data=Outline(rw,rh,tip);
+        var work=SystemParameters.WorkArea;
+        double ww=window.Width;
+        double wh=Math.Max(80,window.ActualHeight>1?window.ActualHeight:140);
+        const double gap=18;
+        window.Left=Math.Max(work.Left+gap,work.Right-ww-gap);
+        window.Top=Math.Max(work.Top+gap,work.Bottom-wh-gap);
+        double rw=Math.Max(80,ww-32);
+        double rh=Math.Max(70,wh-32);
+        ((WpfPath)window.FindName("BubbleOutline")).Data=Outline(rw,rh);
     }
-    private static Geometry Outline(double w,double h,double tip) {
-        const double rad=19;
-        double bottom=h-12,neck=Math.Min(w-rad-12,Math.Max(rad+12,tip-5));
-        var g=new StreamGeometry();
-        using(var c=g.Open()) {
-            c.BeginFigure(new Point(rad,0),true,true);
-            c.LineTo(new Point(w-rad,0),true,false);c.QuadraticBezierTo(new Point(w,0),new Point(w,rad),true,false);
-            c.LineTo(new Point(w,bottom-rad),true,false);c.QuadraticBezierTo(new Point(w,bottom),new Point(w-rad,bottom),true,false);
-            c.LineTo(new Point(neck+12,bottom),true,false);
-            c.BezierTo(new Point(neck+6,bottom),new Point(tip+3,h-3),new Point(tip,h),true,false);
-            c.BezierTo(new Point(tip-3,h-3),new Point(neck-6,bottom),new Point(neck-12,bottom),true,false);
-            c.LineTo(new Point(rad,bottom),true,false);c.QuadraticBezierTo(new Point(0,bottom),new Point(0,bottom-rad),true,false);
-            c.LineTo(new Point(0,rad),true,false);c.QuadraticBezierTo(new Point(0,0),new Point(rad,0),true,false);
-        } g.Freeze();return g;
+
+    // Calm continuous rounded contour; no pointed tail without a tray icon.
+    private static Geometry Outline(double w,double h) {
+        var g=new RectangleGeometry(new Rect(0,0,w,h),20,20);
+        g.Freeze();
+        return g;
     }
+
+    private static DoubleAnimation Fade(double from,double to,int milliseconds,int delay) {
+        return new DoubleAnimation(from,to,TimeSpan.FromMilliseconds(milliseconds)) {
+            BeginTime=TimeSpan.FromMilliseconds(delay),
+            EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut},
+            FillBehavior=FillBehavior.HoldEnd
+        };
+    }
+    private static void MaterializeText(UIElement element,int delay,int duration) {
+        element.Opacity=0;
+        element.BeginAnimation(UIElement.OpacityProperty,Fade(0,1,duration,delay));
+    }
+
     internal void ShowAnimated() {
-        root.Opacity=0;scale.ScaleX=.08;scale.ScaleY=.08;
+        root.Opacity=0;
+        root.Effect=new BlurEffect { Radius=9, RenderingBias=RenderingBias.Performance };
+        scale.ScaleX=.94;
+        scale.ScaleY=.94;
+        ambientGlow.Opacity=0;
+        halo.Opacity=.24;
+        title.Opacity=0;
+        text.Opacity=0;
+        dismiss.Opacity=0;
         window.Show();
-        var elastic=new BackEase {EasingMode=EasingMode.EaseOut,Amplitude=.26};
-        var ax=new DoubleAnimation(.08,1,TimeSpan.FromMilliseconds(520)){EasingFunction=elastic};
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty,ax);
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty,ax.Clone());
-        root.BeginAnimation(UIElement.OpacityProperty,new DoubleAnimation(0,1,TimeSpan.FromMilliseconds(400)));
-        // Ensure a visible, fully expanded bubble even on WPF systems with disabled animation rendering.
-        var ensureVisible=new DispatcherTimer { Interval=TimeSpan.FromMilliseconds(780) };
-        ensureVisible.Tick+=(s,e)=>{
-            ensureVisible.Stop();
+
+        // Phase 1: light emerges from empty space, then fades behind the solid card.
+        var bloom=new DoubleAnimationUsingKeyFrames { FillBehavior=FillBehavior.HoldEnd };
+        bloom.KeyFrames.Add(new LinearDoubleKeyFrame(0,KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        bloom.KeyFrames.Add(new EasingDoubleKeyFrame(.72,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(135)),
+            new CubicEase{EasingMode=EasingMode.EaseOut}));
+        bloom.KeyFrames.Add(new EasingDoubleKeyFrame(.20,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(360)),
+            new CubicEase{EasingMode=EasingMode.EaseInOut}));
+        bloom.KeyFrames.Add(new LinearDoubleKeyFrame(0,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(570))));
+        ambientGlow.BeginAnimation(UIElement.OpacityProperty,bloom);
+
+        // Phase 2: white card condenses from a soft glow (no bounce or flying panel).
+        root.BeginAnimation(UIElement.OpacityProperty,Fade(0,1,300,100));
+        var settle=new CubicEase{EasingMode=EasingMode.EaseOut};
+        var grow=new DoubleAnimation(.94,1,TimeSpan.FromMilliseconds(460)) {
+            BeginTime=TimeSpan.FromMilliseconds(85), EasingFunction=settle
+        };
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty,grow);
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty,grow.Clone());
+        ((BlurEffect)root.Effect).BeginAnimation(BlurEffect.RadiusProperty,Fade(9,0,400,100));
+
+        // Phase 3: the content resolves only once the cloud becomes legible.
+        MaterializeText(title,180,185);
+        MaterializeText(text,260,215);
+        MaterializeText(dismiss,345,150);
+
+        // One restrained halo pulse, then a stable resting glow.
+        var glow=new DoubleAnimationUsingKeyFrames { FillBehavior=FillBehavior.HoldEnd };
+        glow.KeyFrames.Add(new LinearDoubleKeyFrame(.24,KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        glow.KeyFrames.Add(new EasingDoubleKeyFrame(.92,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(350)),
+            new CubicEase{EasingMode=EasingMode.EaseOut}));
+        glow.KeyFrames.Add(new EasingDoubleKeyFrame(.68,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(630)),
+            new CubicEase{EasingMode=EasingMode.EaseInOut}));
+        halo.BeginAnimation(UIElement.OpacityProperty,glow);
+
+        // Make the resting state deterministic even when WPF skips animation frames.
+        settleTimer=new DispatcherTimer { Interval=TimeSpan.FromMilliseconds(730) };
+        settleTimer.Tick+=(s,e)=>{
+            settleTimer.Stop();
             if(closing || !window.IsVisible)return;
+            root.BeginAnimation(UIElement.OpacityProperty,null);
             scale.BeginAnimation(ScaleTransform.ScaleXProperty,null);
             scale.BeginAnimation(ScaleTransform.ScaleYProperty,null);
-            root.BeginAnimation(UIElement.OpacityProperty,null);
+            ((BlurEffect)root.Effect).BeginAnimation(BlurEffect.RadiusProperty,null);
+            ambientGlow.BeginAnimation(UIElement.OpacityProperty,null);
+            halo.BeginAnimation(UIElement.OpacityProperty,null);
+            foreach(var el in new UIElement[]{title,text,dismiss})
+                el.BeginAnimation(UIElement.OpacityProperty,null);
             scale.ScaleX=1;scale.ScaleY=1;root.Opacity=1;
+            ((BlurEffect)root.Effect).Radius=0;
+            ambientGlow.Opacity=0;halo.Opacity=.68;
+            title.Opacity=1;text.Opacity=1;dismiss.Opacity=1;
         };
-        ensureVisible.Start();
+        settleTimer.Start();
         timer.Start();
     }
+
     internal void Close() {
-        if(closing)return;closing=true;timer.Stop();
-        var ax=new DoubleAnimation(1,.08,TimeSpan.FromMilliseconds(200)){EasingFunction=new CubicEase{EasingMode=EasingMode.EaseIn}};
-        ax.Completed+=(s,e)=>window.Close();
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty,ax);
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty,ax.Clone());
-        root.BeginAnimation(UIElement.OpacityProperty,new DoubleAnimation(1,0,TimeSpan.FromMilliseconds(165)));
+        if(closing)return;
+        closing=true;
+        timer.Stop();
+        if(settleTimer!=null)settleTimer.Stop();
+        root.BeginAnimation(UIElement.OpacityProperty,null);
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty,null);
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty,null);
+        var ease=new CubicEase{EasingMode=EasingMode.EaseIn};
+        var shrink=new DoubleAnimation(scale.ScaleX,.97,TimeSpan.FromMilliseconds(225)){EasingFunction=ease};
+        shrink.Completed+=(s,e)=>window.Close();
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty,shrink);
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty,shrink.Clone());
+        root.BeginAnimation(UIElement.OpacityProperty,
+            new DoubleAnimation(root.Opacity,0,TimeSpan.FromMilliseconds(205)){EasingFunction=ease});
     }
 }
