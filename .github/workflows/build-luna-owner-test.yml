@@ -39,6 +39,29 @@ jobs:
           Get-FileHash bin/Release/Luna.Notify.exe -Algorithm SHA256 | Format-List
           Get-FileHash installer-output/*.exe -Algorithm SHA256 | Format-List
           if (-not (Test-Path "installer-output/Luna-Notify-Setup-0.2.0.exe")) { throw "Missing installer" }
+      - name: Smoke test per-user install, autorun and uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = (Resolve-Path "installer-output/Luna-Notify-Setup-0.2.0.exe").Path
+          $app = Join-Path $env:LOCALAPPDATA "Programs\Luna Notify"
+          $exe = Join-Path $app "Luna.Notify.exe"
+          $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+          $install = Start-Process -FilePath $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-' -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Install failed with code $($install.ExitCode)" }
+          if (-not (Test-Path $exe)) { throw "Installed Luna.Notify.exe missing" }
+          $regValue = (Get-ItemProperty -Path $runKey -Name "RusklimatIM.LunaNotify" -ErrorAction Stop)."RusklimatIM.LunaNotify"
+          if ($regValue -notmatch "Luna.Notify.exe") { throw "Autorun registry value missing or incorrect: $regValue" }
+          Write-Host "Installed per-user, autorun value present"
+          $uninstall = Join-Path $app "unins000.exe"
+          if (-not (Test-Path $uninstall)) { throw "Uninstaller missing" }
+          $remove = Start-Process -FilePath $uninstall -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          if ($remove.ExitCode -ne 0) { throw "Uninstall failed with code $($remove.ExitCode)" }
+          Start-Sleep -Milliseconds 800
+          if (Test-Path $exe) { throw "Installed executable remains after uninstall" }
+          $regAfter = Get-ItemProperty -Path $runKey -Name "RusklimatIM.LunaNotify" -ErrorAction SilentlyContinue
+          if ($null -ne $regAfter) { throw "Autorun registry value remains after uninstall" }
+          Write-Host "Uninstall successful, autorun removed"
       - name: SHA256
         shell: pwsh
         run: Get-FileHash bin/Release/Luna.Notify.exe -Algorithm SHA256 | Format-List
