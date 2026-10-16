@@ -37,6 +37,7 @@ internal sealed class LunaApp : IDisposable
     private LunaBubble current;
     private bool exiting;
     private long lastTestTicks;
+    private DispatcherTimer launchPreviewTimer;
 
     [STAThread]
     public static int Main() {
@@ -48,7 +49,10 @@ internal sealed class LunaApp : IDisposable
             var client = new LunaApp(app, mutex);
             try {app.Run();} finally {client.Dispose();}
             return 0;
-        } catch { mutex.Dispose(); return 1; }
+        } catch (Exception ex) {
+            try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "luna-owner-test-error.log"), DateTime.Now.ToString("s") + " Startup: " + ex + Environment.NewLine); } catch { }
+            mutex.Dispose(); return 1;
+        }
     }
     private LunaApp(Application application, Mutex instanceMutex) {
         app=application;
@@ -76,6 +80,11 @@ internal sealed class LunaApp : IDisposable
             listener=null;
             tray.ShowBalloonTip(4000,"Luna","Порт тестового подключения занят. Локальный бабл доступен из трея.",Forms.ToolTipIcon.Warning);
         }
+        // Owner-only visual test: show a MoonGlow bubble automatically once after startup.
+        // This avoids relying on Windows tray menu messages to verify that WPF is visible.
+        launchPreviewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1300) };
+        launchPreviewTimer.Tick += (s,e) => { launchPreviewTimer.Stop(); ShowTest(); };
+        launchPreviewTimer.Start();
     }
     private void ShowTest() {
         if (exiting) return;
@@ -85,11 +94,17 @@ internal sealed class LunaApp : IDisposable
     }
     private void Drain() {
         if(exiting || current!=null || queue.Count==0)return;
-        current=new LunaBubble(moon,queue.Dequeue(),()=>{
+        try {
+            current=new LunaBubble(moon,queue.Dequeue(),()=>{
+                current=null;
+                app.Dispatcher.BeginInvoke(new Action(Drain));
+            });
+            current.ShowAnimated();
+        } catch(Exception ex) {
             current=null;
-            app.Dispatcher.BeginInvoke(new Action(Drain));
-        });
-        current.ShowAnimated();
+            try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "luna-owner-test-error.log"), DateTime.Now.ToString("s") + " Bubble: " + ex + Environment.NewLine); } catch { }
+            tray.ShowBalloonTip(5500,"Luna: ошибка бабла",ex.GetType().Name + ": " + ex.Message,Forms.ToolTipIcon.Error);
+        }
     }
     private void AcceptLoop() {
         while(!exiting && listener!=null) {
@@ -173,6 +188,7 @@ internal sealed class LunaApp : IDisposable
     private void Exit() {
         if(exiting)return;
         exiting=true;
+        if(launchPreviewTimer!=null)launchPreviewTimer.Stop();
         try {if(listener!=null)listener.Stop();}catch{}
         tray.Visible=false;
         if(current!=null)current.Close();
@@ -280,10 +296,21 @@ internal sealed class LunaBubble
         root.Opacity=0;scale.ScaleX=.08;scale.ScaleY=.08;
         window.Show();
         var elastic=new BackEase {EasingMode=EasingMode.EaseOut,Amplitude=.26};
-        var ax=new DoubleAnimation(.08,1,TimeSpan.FromMilliseconds(270)){EasingFunction=elastic};
+        var ax=new DoubleAnimation(.08,1,TimeSpan.FromMilliseconds(520)){EasingFunction=elastic};
         scale.BeginAnimation(ScaleTransform.ScaleXProperty,ax);
         scale.BeginAnimation(ScaleTransform.ScaleYProperty,ax.Clone());
-        root.BeginAnimation(UIElement.OpacityProperty,new DoubleAnimation(0,1,TimeSpan.FromMilliseconds(180)));
+        root.BeginAnimation(UIElement.OpacityProperty,new DoubleAnimation(0,1,TimeSpan.FromMilliseconds(400)));
+        // Ensure a visible, fully expanded bubble even on WPF systems with disabled animation rendering.
+        var ensureVisible=new DispatcherTimer { Interval=TimeSpan.FromMilliseconds(780) };
+        ensureVisible.Tick+=(s,e)=>{
+            ensureVisible.Stop();
+            if(closing || !window.IsVisible)return;
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty,null);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty,null);
+            root.BeginAnimation(UIElement.OpacityProperty,null);
+            scale.ScaleX=1;scale.ScaleY=1;root.Opacity=1;
+        };
+        ensureVisible.Start();
         timer.Start();
     }
     internal void Close() {
