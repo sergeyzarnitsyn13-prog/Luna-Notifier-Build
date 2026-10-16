@@ -45,6 +45,7 @@ try {
   Write-Host "Bubble window shown: visible=$($visibleWindow.IsVisible) width=$($visibleWindow.ActualWidth) height=$($visibleWindow.ActualHeight) at ($($visibleWindow.Left),$($visibleWindow.Top))"
   if ($visibleWindow.ActualWidth -lt 150 -or $visibleWindow.ActualHeight -lt 60) { throw 'Bubble window has unexpectedly small dimensions' }
   $visibleWindow.Close()
+  $app.Shutdown()
   Write-Host "Compiled bubble ShowAnimated PASSED"
   Write-Host "WPF bubble XAML validation PASSED"
   $window.Close()
