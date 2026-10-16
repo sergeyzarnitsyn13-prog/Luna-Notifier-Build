@@ -1,4 +1,4 @@
-name: Build Luna Owner Test EXE
+name: Build Luna Notify Windows Installer
 on:
   workflow_dispatch:
   push:
@@ -6,6 +6,7 @@ on:
       - 'Luna.OwnerTest.csproj'
       - 'source/**'
       - 'scripts/**'
+      - 'installer/**'
       - 'assets/**'
       - '.github/workflows/build-luna-owner-test.yml'
 permissions:
@@ -22,13 +23,31 @@ jobs:
       - name: Validate WPF bubble
         shell: pwsh
         run: powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File scripts/Validate-Bubble.ps1
+      - name: Install Inno Setup compiler
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\\Inno Setup 6\\ISCC.exe")) {
+            choco install innosetup --yes --no-progress --limit-output
+          }
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\\Inno Setup 6\\ISCC.exe")) { throw "Inno Setup compiler missing" }
+      - name: Build per-user installer
+        shell: pwsh
+        run: '& "${env:ProgramFiles(x86)}\\Inno Setup 6\\ISCC.exe" "installer\\LunaNotify.iss"'
+      - name: Validate installer and app hash
+        shell: pwsh
+        run: |
+          Get-FileHash bin/Release/Luna.Notify.exe -Algorithm SHA256 | Format-List
+          Get-FileHash installer-output/*.exe -Algorithm SHA256 | Format-List
+          if (-not (Test-Path "installer-output/Luna-Notify-Setup-0.2.0.exe")) { throw "Missing installer" }
       - name: SHA256
         shell: pwsh
-        run: Get-FileHash bin/Release/Luna.OwnerTest.exe -Algorithm SHA256 | Format-List
+        run: Get-FileHash bin/Release/Luna.Notify.exe -Algorithm SHA256 | Format-List
       - name: Package EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Luna-Owner-Test-Windows-EXE
-          path: bin/Release/Luna.OwnerTest.exe
+          name: Luna-Notify-Installer-Windows
+          path: |
+            installer-output/Luna-Notify-Setup-0.2.0.exe
+            bin/Release/Luna.Notify.exe
           if-no-files-found: error
           retention-days: 7

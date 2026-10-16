@@ -2,8 +2,8 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration>
     <OutputType>WinExe</OutputType>
-    <RootNamespace>Luna.OwnerTest</RootNamespace>
-    <AssemblyName>Luna.OwnerTest</AssemblyName>
+    <RootNamespace>Luna.Notify</RootNamespace>
+    <AssemblyName>Luna.Notify</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <LangVersion>5</LangVersion>
     <ApplicationIcon>assets\luna.ico</ApplicationIcon>

@@ -1,4 +1,4 @@
-// Luna Owner-only loopback TEST (Systematic 3.57) — NOT a production delivery client.
+// Luna Notify: per-user background notification preview and local fixed-text Systematic test.
 // This program receives only a fixed test signal over 127.0.0.1. No outbound traffic.
 using System;
 using System.Collections.Generic;
@@ -17,7 +17,6 @@ using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
-using Forms = System.Windows.Forms;
 using WpfPath = System.Windows.Shapes.Path;
 
 internal sealed class AlertItem { internal string Id, Title, Body, Source; }
@@ -29,7 +28,6 @@ internal sealed class LunaApp : IDisposable
     private const string TrustedOrigin = "https://d5d1foolkgopgtskjhcv.d8epmcec.apigw.yandexcloud.net";
     private readonly Application app;
     private readonly Mutex mutex;
-    private readonly Forms.NotifyIcon tray;
     private readonly LunaMoon moon;
     private readonly Queue<AlertItem> queue = new Queue<AlertItem>();
     private readonly object gate = new object();
@@ -38,15 +36,21 @@ internal sealed class LunaApp : IDisposable
     private bool exiting;
     private long lastTestTicks;
     private DispatcherTimer launchPreviewTimer;
+    private bool ownsMutex;
 
     [STAThread]
-    public static int Main() {
+    public static int Main(string[] args) {
+        bool showPreview = Array.IndexOf(args ?? new string[0], "--preview") >= 0;
         bool acquired;
         var mutex = new Mutex(true, @"Local\RusklimatIM.LunaOwnerTest.v1", out acquired);
-        if (!acquired) {mutex.Dispose(); return 0;}
+        if (!acquired) {
+            mutex.Dispose();
+            if (showPreview) SendLocalPreview();
+            return 0;
+        }
         try {
             var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-            var client = new LunaApp(app, mutex);
+            var client = new LunaApp(app, mutex, showPreview);
             try {app.Run();} finally {client.Dispose();}
             return 0;
         } catch (Exception ex) {
@@ -54,37 +58,28 @@ internal sealed class LunaApp : IDisposable
             mutex.Dispose(); return 1;
         }
     }
-    private LunaApp(Application application, Mutex instanceMutex) {
+    private LunaApp(Application application, Mutex instanceMutex, bool showPreview) {
         app=application;
         mutex=instanceMutex;
+        ownsMutex=true;
         moon=new LunaMoon();
-        var menu=new Forms.ContextMenuStrip();
-        menu.Items.Add("Показать тестовый бабл",null,(s,e)=>ShowTest());
-        menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("Выход",null,(s,e)=>Exit());
-        var icon=System.Drawing.Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location);
-        tray=new Forms.NotifyIcon {
-            Icon=icon ?? System.Drawing.SystemIcons.Information,
-            Text="Luna · Тест Systematic", Visible=true, ContextMenuStrip=menu
-        };
-        tray.MouseUp+=(s,e)=>moon.SetAnchor(Forms.Cursor.Position);
-        tray.DoubleClick+=(s,e)=>{moon.SetAnchor(Forms.Cursor.Position);ShowTest();};
         try {
             // TcpListener binds to loopback only, does not need admin, firewall rules or URL ACL.
             listener=new TcpListener(IPAddress.Loopback,Port);
             listener.Start(2);
             var thread=new Thread(AcceptLoop) { IsBackground=true, Name="LunaTestLoopback" };
             thread.Start();
-        } catch (Exception) {
+        } catch (Exception ex) {
             if (listener!=null) {try {listener.Stop();} catch {}}
             listener=null;
-            tray.ShowBalloonTip(4000,"Luna","Порт тестового подключения занят. Локальный бабл доступен из трея.",Forms.ToolTipIcon.Warning);
+            Report("Listener",ex);
         }
-        // Owner-only visual test: show a MoonGlow bubble automatically once after startup.
-        // This avoids relying on Windows tray menu messages to verify that WPF is visible.
-        launchPreviewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1300) };
-        launchPreviewTimer.Tick += (s,e) => { launchPreviewTimer.Stop(); ShowTest(); };
-        launchPreviewTimer.Start();
+        // First installation preview only; Windows logon never produces an unsolicited demo.
+        if (showPreview) {
+            launchPreviewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
+            launchPreviewTimer.Tick += (s,e) => { launchPreviewTimer.Stop(); ShowTest(); };
+            launchPreviewTimer.Start();
+        }
     }
     private void ShowTest() {
         if (exiting) return;
@@ -102,8 +97,7 @@ internal sealed class LunaApp : IDisposable
             current.ShowAnimated();
         } catch(Exception ex) {
             current=null;
-            try { File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "luna-owner-test-error.log"), DateTime.Now.ToString("s") + " Bubble: " + ex + Environment.NewLine); } catch { }
-            tray.ShowBalloonTip(5500,"Luna: ошибка бабла",ex.GetType().Name + ": " + ex.Message,Forms.ToolTipIcon.Error);
+            Report("Bubble",ex);
         }
     }
     private void AcceptLoop() {
@@ -185,18 +179,38 @@ internal sealed class LunaApp : IDisposable
         byte[] bytes=Encoding.UTF8.GetBytes(headers+body);
         stream.Write(bytes,0,bytes.Length);stream.Flush();
     }
+    private static void Report(string where,Exception ex) {
+        try {
+            string dir=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Rusklimat IM", "Luna Notify");
+            Directory.CreateDirectory(dir);
+            File.AppendAllText(System.IO.Path.Combine(dir,"luna-errors.log"), DateTime.Now.ToString("s")+" "+where+": "+ex+Environment.NewLine);
+        } catch { }
+    }
+    private static void SendLocalPreview() {
+        try {
+            using(var c = new TcpClient()) {
+                c.Connect(IPAddress.Loopback,Port);
+                using(var s = c.GetStream()) {
+                    var req = "POST "+TestPath+" HTTP/1.1\r\nHost: 127.0.0.1:58731\r\nOrigin: "+TrustedOrigin+"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+                    byte[] bytes=Encoding.UTF8.GetBytes(req);
+                    s.Write(bytes,0,bytes.Length);
+                    s.Flush();
+                }
+            }
+        } catch (Exception ex) { Report("Preview",ex); }
+    }
     private void Exit() {
         if(exiting)return;
         exiting=true;
         if(launchPreviewTimer!=null)launchPreviewTimer.Stop();
         try {if(listener!=null)listener.Stop();}catch{}
-        tray.Visible=false;
         if(current!=null)current.Close();
         app.Shutdown();
     }
     public void Dispose() {
-        try {tray.Dispose();}catch{}
-        try {mutex.ReleaseMutex();}catch{}
+        if (launchPreviewTimer != null) launchPreviewTimer.Stop();
+        if (listener != null) { try { listener.Stop(); } catch {} }
+        if (ownsMutex) { try { mutex.ReleaseMutex(); } catch {} ownsMutex=false; }
         mutex.Dispose();
     }
 }
@@ -213,30 +227,8 @@ internal static class Embed
 // One tray moon, no secondary floating moon and no idle windows.
 // When the user clicks the tray icon the origin is exact. Before the first click,
 // default to Windows taskbar notification area, with all four taskbar orientations handled.
-internal sealed class LunaMoon
-{
-    private bool hasAnchor;
-    private System.Drawing.Point anchor;
-    internal double Left {get; private set;}
-    internal double Top {get; private set;}
-    internal double Width {get {return 24;} }
-    internal double Height {get {return 24;} }
-    internal LunaMoon() { Update(); }
-    internal void SetAnchor(System.Drawing.Point position) {
-        anchor=position;hasAnchor=true;Update();
-    }
-    internal void Update() {
-        if (hasAnchor) { Left=anchor.X-Width/2;Top=anchor.Y-Height/2;return; }
-        var screen=Forms.Screen.PrimaryScreen;
-        var w=screen.WorkingArea;var b=screen.Bounds;
-        if (w.Bottom < b.Bottom) { Left=w.Right-94;Top=w.Bottom+8; }
-        else if (w.Top > b.Top) { Left=w.Right-94;Top=b.Top+9; }
-        else if (w.Right < b.Right) { Left=w.Right+8;Top=w.Bottom-65; }
-        else if (w.Left > b.Left) { Left=b.Left+8;Top=w.Bottom-65; }
-        else { Left=w.Right-94;Top=w.Bottom-14; }
-    }
-    internal void Pulse() { /* Tray Luna remains the only moon; bubble itself animates from it. */ }
-}
+// Notification anchor is calculated entirely in WPF device-independent pixels.
+internal sealed class LunaMoon { internal void Pulse() {} }
 
 internal sealed class LunaBubble
 {

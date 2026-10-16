@@ -17,7 +17,7 @@ try {
     throw 'BubbleRoot must have a ScaleTransform'
   }
   Write-Host "WPF markup parse PASSED"
-  $exe = Join-Path (Split-Path $PSScriptRoot -Parent) 'bin\Release\Luna.OwnerTest.exe'
+  $exe = Join-Path (Split-Path $PSScriptRoot -Parent) 'bin\Release\Luna.Notify.exe'
   $assembly = [System.Reflection.Assembly]::LoadFrom($exe)
   $resourceNames = $assembly.GetManifestResourceNames()
   foreach ($name in @('SpeechBubbleXaml','MoonPng')) {
