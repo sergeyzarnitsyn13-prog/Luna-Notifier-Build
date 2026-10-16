@@ -5,6 +5,7 @@ on:
     paths:
       - 'Luna.OwnerTest.csproj'
       - 'source/**'
+      - 'scripts/**'
       - 'assets/**'
       - '.github/workflows/build-luna-owner-test.yml'
 permissions:
