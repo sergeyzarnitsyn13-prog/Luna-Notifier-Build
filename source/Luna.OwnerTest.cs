@@ -50,7 +50,7 @@ internal sealed class LunaApp : IDisposable
             try {app.Run();} finally {client.Dispose();}
             return 0;
         } catch (Exception ex) {
-            try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "luna-owner-test-error.log"), DateTime.Now.ToString("s") + " Startup: " + ex + Environment.NewLine); } catch { }
+            try { File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "luna-owner-test-error.log"), DateTime.Now.ToString("s") + " Startup: " + ex + Environment.NewLine); } catch { }
             mutex.Dispose(); return 1;
         }
     }
@@ -102,7 +102,7 @@ internal sealed class LunaApp : IDisposable
             current.ShowAnimated();
         } catch(Exception ex) {
             current=null;
-            try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "luna-owner-test-error.log"), DateTime.Now.ToString("s") + " Bubble: " + ex + Environment.NewLine); } catch { }
+            try { File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "luna-owner-test-error.log"), DateTime.Now.ToString("s") + " Bubble: " + ex + Environment.NewLine); } catch { }
             tray.ShowBalloonTip(5500,"Luna: ошибка бабла",ex.GetType().Name + ": " + ex.Message,Forms.ToolTipIcon.Error);
         }
     }
