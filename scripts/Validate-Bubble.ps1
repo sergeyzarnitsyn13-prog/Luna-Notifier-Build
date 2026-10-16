@@ -16,6 +16,27 @@ try {
   if ($null -eq $root.RenderTransform -or $root.RenderTransform.GetType().Name -ne 'ScaleTransform') {
     throw 'BubbleRoot must have a ScaleTransform'
   }
+  Write-Host "WPF markup parse PASSED"
+  $exe = Join-Path (Split-Path $PSScriptRoot -Parent) 'bin\Release\Luna.OwnerTest.exe'
+  $assembly = [System.Reflection.Assembly]::LoadFrom($exe)
+  $resourceNames = $assembly.GetManifestResourceNames()
+  foreach ($name in @('SpeechBubbleXaml','MoonPng')) {
+    if ($resourceNames -notcontains $name) { throw "Missing embedded resource: $name" }
+    Write-Host "Embedded resource found: $name"
+  }
+  $flags = [System.Reflection.BindingFlags]'NonPublic,Public,Instance'
+  $moonType = $assembly.GetType('LunaMoon', $true)
+  $alertType = $assembly.GetType('AlertItem', $true)
+  $bubbleType = $assembly.GetType('LunaBubble', $true)
+  $moon = $moonType.GetConstructor($flags, $null, [Type[]]@(), $null).Invoke(@())
+  $alert = $alertType.GetConstructor($flags, $null, [Type[]]@(), $null).Invoke(@())
+  $alertType.GetField('Title', $flags).SetValue($alert, '')
+  $alertType.GetField('Body', $flags).SetValue($alert, 'Test bubble constructor on Windows')
+  $dismiss = [System.Action]{ }
+  $ctor = $bubbleType.GetConstructors($flags) | Select-Object -First 1
+  $bubble = $ctor.Invoke(@($moon,$alert,$dismiss))
+  if ($null -eq $bubble) { throw 'Bubble constructor returned null' }
+  Write-Host "Compiled bubble constructor PASSED"
   Write-Host "WPF bubble XAML validation PASSED"
   $window.Close()
 }
