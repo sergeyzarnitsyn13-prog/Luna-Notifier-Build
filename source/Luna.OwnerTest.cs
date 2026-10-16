@@ -304,7 +304,7 @@ internal sealed class LunaBubble
     }
 
     internal void ShowAnimated() {
-        root.Opacity=0;
+        root.Opacity=1;
         root.Effect=new BlurEffect { Radius=3, RenderingBias=RenderingBias.Performance };
         scale.ScaleX=.97;
         scale.ScaleY=.97;
@@ -318,15 +318,29 @@ internal sealed class LunaBubble
         // Phase 1: a restrained icy outline, not a blue overlay across the desktop.
         var bloom=new DoubleAnimationUsingKeyFrames { FillBehavior=FillBehavior.HoldEnd };
         bloom.KeyFrames.Add(new LinearDoubleKeyFrame(0,KeyTime.FromTimeSpan(TimeSpan.Zero)));
-        bloom.KeyFrames.Add(new EasingDoubleKeyFrame(.29,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(130)),
+        bloom.KeyFrames.Add(new EasingDoubleKeyFrame(.16,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(130)),
             new CubicEase{EasingMode=EasingMode.EaseOut}));
         bloom.KeyFrames.Add(new EasingDoubleKeyFrame(.10,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(225)),
             new CubicEase{EasingMode=EasingMode.EaseInOut}));
         bloom.KeyFrames.Add(new LinearDoubleKeyFrame(0,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(335))));
         ambientGlow.BeginAnimation(UIElement.OpacityProperty,bloom);
 
-        // Phase 2: softly reveal the finished card, with very little motion.
-        root.BeginAnimation(UIElement.OpacityProperty,Fade(0,1,230,15));
+        // Phase 2: reveal an opaque card through an expanding soft radial light mask.
+        var mask=new RadialGradientBrush();
+        mask.MappingMode=BrushMappingMode.RelativeToBoundingBox;
+        mask.Center=new Point(.64,.56);
+        mask.GradientOrigin=mask.Center;
+        mask.RadiusX=.15;
+        mask.RadiusY=.15;
+        mask.GradientStops.Add(new GradientStop(Colors.White,0));
+        mask.GradientStops.Add(new GradientStop(Colors.White,.64));
+        mask.GradientStops.Add(new GradientStop(Colors.Transparent,1));
+        root.OpacityMask=mask;
+        var reveal=new DoubleAnimation(.15,1.65,TimeSpan.FromMilliseconds(370)){
+            EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut}
+        };
+        mask.BeginAnimation(RadialGradientBrush.RadiusXProperty,reveal);
+        mask.BeginAnimation(RadialGradientBrush.RadiusYProperty,reveal.Clone());
         var settle=new CubicEase{EasingMode=EasingMode.EaseOut};
         var grow=new DoubleAnimation(.97,1,TimeSpan.FromMilliseconds(350)) {
             BeginTime=TimeSpan.FromMilliseconds(10), EasingFunction=settle
@@ -336,9 +350,9 @@ internal sealed class LunaBubble
         ((BlurEffect)root.Effect).BeginAnimation(BlurEffect.RadiusProperty,Fade(3,0,250,15));
 
         // Phase 3: sequential micro-fades, legible by ~0.45 s.
-        MaterializeText(title,135,155);
-        MaterializeText(text,190,170);
-        MaterializeText(dismiss,265,135);
+        MaterializeText(title,165,165);
+        MaterializeText(text,215,180);
+        MaterializeText(dismiss,285,135);
 
         // A single tiny edge pulse settles to the permanent MoonGlow rim.
         var glow=new DoubleAnimationUsingKeyFrames { FillBehavior=FillBehavior.HoldEnd };
@@ -360,6 +374,7 @@ internal sealed class LunaBubble
             ((BlurEffect)root.Effect).BeginAnimation(BlurEffect.RadiusProperty,null);
             ambientGlow.BeginAnimation(UIElement.OpacityProperty,null);
             halo.BeginAnimation(UIElement.OpacityProperty,null);
+            root.OpacityMask=null;
             foreach(var el in new UIElement[]{title,text,dismiss})
                 el.BeginAnimation(UIElement.OpacityProperty,null);
             scale.ScaleX=1;scale.ScaleY=1;root.Opacity=1;
@@ -376,6 +391,7 @@ internal sealed class LunaBubble
         closing=true;
         timer.Stop();
         if(settleTimer!=null)settleTimer.Stop();
+        root.OpacityMask=null;
         root.BeginAnimation(UIElement.OpacityProperty,null);
         scale.BeginAnimation(ScaleTransform.ScaleXProperty,null);
         scale.BeginAnimation(ScaleTransform.ScaleYProperty,null);
