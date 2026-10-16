@@ -35,13 +35,16 @@
  </Window.Resources>
 
  <Grid x:Name="MoonScene" Margin="16" ClipToBounds="False">
-  <!-- The atmospheric bloom appears first, before the card takes shape. -->
-  <Ellipse x:Name="AmbientGlow" Fill="#8DD6FF" Opacity="0" Margin="13,5" IsHitTestVisible="False">
-   <Ellipse.Effect><BlurEffect Radius="30" RenderingBias="Performance"/></Ellipse.Effect>
-  </Ellipse>
+  <!-- Light condenses along the future contour. No screen-covering blue fog. -->
+  <Canvas IsHitTestVisible="False" ClipToBounds="False">
+   <Path x:Name="AmbientGlow" Data="{Binding Data, ElementName=BubbleOutline}" Stroke="#81D6FF" StrokeThickness="1.8"
+         Opacity="0" Fill="Transparent" IsHitTestVisible="False">
+    <Path.Effect><DropShadowEffect Color="#66C6FF" BlurRadius="22" ShadowDepth="0" Opacity="0.72"/></Path.Effect>
+   </Path>
+  </Canvas>
   <Grid x:Name="BubbleRoot" Opacity="0" ClipToBounds="False" RenderTransformOrigin="0.70,0.75">
    <Grid.CacheMode><BitmapCache/></Grid.CacheMode>
-   <Grid.RenderTransform><ScaleTransform ScaleX="0.94" ScaleY="0.94"/></Grid.RenderTransform>
+   <Grid.RenderTransform><ScaleTransform ScaleX="0.97" ScaleY="0.97"/></Grid.RenderTransform>
    <!-- The shape has no disconnected tail: this version does not use a tray anchor. -->
    <Canvas IsHitTestVisible="False" ClipToBounds="False">
     <Path Data="{Binding Data, ElementName=BubbleOutline}" Fill="#F4FAFF" IsHitTestVisible="False">

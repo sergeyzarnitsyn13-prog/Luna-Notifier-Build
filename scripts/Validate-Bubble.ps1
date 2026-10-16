@@ -16,6 +16,9 @@ try {
   if ($null -eq $root.RenderTransform -or $root.RenderTransform.GetType().Name -ne 'ScaleTransform') {
     throw 'BubbleRoot must have a ScaleTransform'
   }
+  $ambient=$window.FindName('AmbientGlow')
+  if ($ambient.GetType().FullName -ne 'System.Windows.Shapes.Path') { throw 'Ambient glow must be a thin stroked contour, not an ellipse fog' }
+  if ($ambient.Fill.ToString() -ne '#00FFFFFF') { Write-Host "Ambient fill=$($ambient.Fill) (outline-only glow)" }
   Write-Host "WPF markup parse PASSED"
   $exe = Join-Path (Split-Path $PSScriptRoot -Parent) 'bin\Release\Luna.Notify.exe'
   $assembly = [System.Reflection.Assembly]::LoadFrom($exe)
