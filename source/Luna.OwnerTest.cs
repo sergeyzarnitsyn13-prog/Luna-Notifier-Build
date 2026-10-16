@@ -318,27 +318,27 @@ internal sealed class LunaBubble
         // Phase 1: a restrained icy outline, not a blue overlay across the desktop.
         var bloom=new DoubleAnimationUsingKeyFrames { FillBehavior=FillBehavior.HoldEnd };
         bloom.KeyFrames.Add(new LinearDoubleKeyFrame(0,KeyTime.FromTimeSpan(TimeSpan.Zero)));
-        bloom.KeyFrames.Add(new EasingDoubleKeyFrame(.68,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(150)),
+        bloom.KeyFrames.Add(new EasingDoubleKeyFrame(.29,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(130)),
             new CubicEase{EasingMode=EasingMode.EaseOut}));
-        bloom.KeyFrames.Add(new EasingDoubleKeyFrame(.25,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(325)),
+        bloom.KeyFrames.Add(new EasingDoubleKeyFrame(.10,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(225)),
             new CubicEase{EasingMode=EasingMode.EaseInOut}));
-        bloom.KeyFrames.Add(new LinearDoubleKeyFrame(0,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(540))));
+        bloom.KeyFrames.Add(new LinearDoubleKeyFrame(0,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(335))));
         ambientGlow.BeginAnimation(UIElement.OpacityProperty,bloom);
 
         // Phase 2: softly reveal the finished card, with very little motion.
-        root.BeginAnimation(UIElement.OpacityProperty,Fade(0,1,265,105));
+        root.BeginAnimation(UIElement.OpacityProperty,Fade(0,1,230,15));
         var settle=new CubicEase{EasingMode=EasingMode.EaseOut};
         var grow=new DoubleAnimation(.97,1,TimeSpan.FromMilliseconds(350)) {
-            BeginTime=TimeSpan.FromMilliseconds(90), EasingFunction=settle
+            BeginTime=TimeSpan.FromMilliseconds(10), EasingFunction=settle
         };
         scale.BeginAnimation(ScaleTransform.ScaleXProperty,grow);
         scale.BeginAnimation(ScaleTransform.ScaleYProperty,grow.Clone());
-        ((BlurEffect)root.Effect).BeginAnimation(BlurEffect.RadiusProperty,Fade(3,0,310,110));
+        ((BlurEffect)root.Effect).BeginAnimation(BlurEffect.RadiusProperty,Fade(3,0,250,15));
 
         // Phase 3: sequential micro-fades, legible by ~0.45 s.
-        MaterializeText(title,185,165);
-        MaterializeText(text,235,180);
-        MaterializeText(dismiss,290,135);
+        MaterializeText(title,135,155);
+        MaterializeText(text,190,170);
+        MaterializeText(dismiss,265,135);
 
         // A single tiny edge pulse settles to the permanent MoonGlow rim.
         var glow=new DoubleAnimationUsingKeyFrames { FillBehavior=FillBehavior.HoldEnd };
@@ -350,7 +350,7 @@ internal sealed class LunaBubble
         halo.BeginAnimation(UIElement.OpacityProperty,glow);
 
         // Always settle to a deterministic final state on low-fps Windows desktops.
-        settleTimer=new DispatcherTimer { Interval=TimeSpan.FromMilliseconds(630) };
+        settleTimer=new DispatcherTimer { Interval=TimeSpan.FromMilliseconds(590) };
         settleTimer.Tick+=(s,e)=>{
             settleTimer.Stop();
             if(closing || !window.IsVisible)return;
