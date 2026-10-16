@@ -263,18 +263,19 @@ internal sealed class LunaBubble
         moon.Pulse();
     }
     private void Position(LunaMoon moon) {
-        moon.Update();
+        // WPF Window.Left/Top are device-independent pixels (DIPs).
+        // WinForms cursor/working-area values may use physical pixels at 125%+ DPI.
+        // Never mix those coordinate systems: anchor entirely within WPF work area.
         window.UpdateLayout();
-        double ww=window.Width;
-        double wh=window.ActualHeight>1?window.ActualHeight:220;
-        double rw=Math.Max(80,ww-32),rh=Math.Max(80,wh-32);
-        double anchorX=moon.Left+moon.Width*.53;
-        double anchorY=moon.Top+16;
-        var work=SystemParameters.WorkArea;
-        window.Left=Math.Max(work.Left+8,Math.Min(work.Right-ww-8,anchorX-ww+72));
-        window.Top=Math.Max(work.Top+8,anchorY-rh-18);
-        double tip=Math.Min(rw-34,Math.Max(34,anchorX-window.Left-16));
-        root.RenderTransformOrigin=new Point(tip/rw,(rh-2)/rh);
+        var work = SystemParameters.WorkArea;
+        double ww = window.Width;
+        double wh = Math.Max(80, window.ActualHeight > 1 ? window.ActualHeight : 150);
+        double margin = 18;
+        window.Left = Math.Max(work.Left + margin, work.Right - ww - margin);
+        window.Top = Math.Max(work.Top + margin, work.Bottom - wh - margin);
+        double rw = Math.Max(80,ww - 32),rh = Math.Max(80,wh - 32);
+        double tip = rw - 55;
+        root.RenderTransformOrigin = new Point(tip/rw,(rh-2)/rh);
         ((WpfPath)window.FindName("BubbleOutline")).Data=Outline(rw,rh,tip);
     }
     private static Geometry Outline(double w,double h,double tip) {
