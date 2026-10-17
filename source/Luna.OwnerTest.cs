@@ -234,12 +234,15 @@ internal sealed class LunaBubble
 {
     private readonly Window window;
     private readonly Grid root;
+    private readonly Grid scene;
     private readonly ScaleTransform scale;
     private readonly WpfPath ambientGlow;
     private readonly WpfPath halo;
     private readonly TextBlock title;
     private readonly TextBlock text;
     private readonly Button dismiss;
+    private readonly Ellipse seedCore, sparkA, sparkB;
+    private readonly Border revealFront;
     private readonly Action onDismiss;
     private readonly DispatcherTimer timer;
     private DispatcherTimer settleTimer;
@@ -247,9 +250,10 @@ internal sealed class LunaBubble
 
     internal LunaBubble(LunaMoon moon, AlertItem item, Action closed) {
         onDismiss=closed;
-        using(var sr=new StreamReader(Embed.Get("SpeechBubbleXaml")))
+        using (var sr=new StreamReader(Embed.Get("SpeechBubbleXaml")))
             window=(Window)XamlReader.Parse(sr.ReadToEnd());
         window.MaxHeight=320;
+        scene=(Grid)window.FindName("MoonScene");
         root=(Grid)window.FindName("BubbleRoot");
         scale=(ScaleTransform)root.RenderTransform;
         ambientGlow=(WpfPath)window.FindName("AmbientGlow");
@@ -257,6 +261,10 @@ internal sealed class LunaBubble
         title=(TextBlock)window.FindName("TitleText");
         text=(TextBlock)window.FindName("TaskText");
         dismiss=(Button)window.FindName("DismissButton");
+        seedCore=(Ellipse)window.FindName("SeedCore");
+        sparkA=(Ellipse)window.FindName("SeedSparkA");
+        sparkB=(Ellipse)window.FindName("SeedSparkB");
+        revealFront=(Border)window.FindName("RevealFront");
         text.Text=(item.Title.Length>0 ? item.Title+"\n" : "")+item.Body;
         dismiss.Click+=(s,e)=>Close();
         timer=new DispatcherTimer { Interval=TimeSpan.FromSeconds(10) };
@@ -267,125 +275,123 @@ internal sealed class LunaBubble
             onDismiss();
         };
         window.Loaded+=(s,e)=>Position();
-        moon.Pulse();
     }
-
     private void Position() {
-        // Position with WPF DIPs only. WinForms pixels break at 125% scaling.
+        // Coordinates in WPF DIPs, never mixed with Windows Forms pixels.
         window.UpdateLayout();
         var work=SystemParameters.WorkArea;
         double ww=window.Width;
         double wh=Math.Max(80,window.ActualHeight>1?window.ActualHeight:140);
-        const double gap=18;
-        window.Left=Math.Max(work.Left+gap,work.Right-ww-gap);
-        window.Top=Math.Max(work.Top+gap,work.Bottom-wh-gap);
-        double rw=Math.Max(80,ww-32);
-        double rh=Math.Max(70,wh-32);
+        const double margin=18;
+        window.Left=Math.Max(work.Left+margin,work.Right-ww-margin);
+        window.Top=Math.Max(work.Top+margin,work.Bottom-wh-margin);
+        double rw=Math.Max(80,ww-32), rh=Math.Max(70,wh-32);
         ((WpfPath)window.FindName("BubbleOutline")).Data=Outline(rw,rh);
+        // Origin is near the right-center, where the notification gathers.
+        double sx=rw-35, sy=rh/2;
+        Canvas.SetLeft(seedCore,sx-6);Canvas.SetTop(seedCore,sy-6);
+        Canvas.SetLeft(sparkA,sx+14);Canvas.SetTop(sparkA,sy-22);
+        Canvas.SetLeft(sparkB,sx-19);Canvas.SetTop(sparkB,sy+13);
     }
-
-    // Calm continuous rounded contour; no pointed tail without a tray icon.
     private static Geometry Outline(double w,double h) {
-        var g=new RectangleGeometry(new Rect(0,0,w,h),20,20);
-        g.Freeze();
-        return g;
+        var geometry=new RectangleGeometry(new Rect(0,0,w,h),20,20);
+        geometry.Freeze();
+        return geometry;
     }
-
-    private static DoubleAnimation Fade(double from,double to,int milliseconds,int delay) {
-        return new DoubleAnimation(from,to,TimeSpan.FromMilliseconds(milliseconds)) {
-            BeginTime=TimeSpan.FromMilliseconds(delay),
+    private static DoubleAnimation Tween(double from,double to,int durationMs,int delayMs) {
+        return new DoubleAnimation(from,to,TimeSpan.FromMilliseconds(durationMs)) {
+            BeginTime=TimeSpan.FromMilliseconds(delayMs),
             EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut},
             FillBehavior=FillBehavior.HoldEnd
         };
     }
-    private static void MaterializeText(UIElement element,int delay,int duration) {
+    private static void RevealElement(UIElement element,int delayMs,int durationMs) {
         element.Opacity=0;
-        element.BeginAnimation(UIElement.OpacityProperty,Fade(0,1,duration,delay));
+        element.BeginAnimation(UIElement.OpacityProperty,Tween(0,1,durationMs,delayMs));
     }
-
     internal void ShowAnimated() {
+        closing=false;
+        // True opacity and solid white-blue fill: card is NEVER ghosted over the desktop.
         root.Opacity=1;
-        root.Effect=new BlurEffect { Radius=3, RenderingBias=RenderingBias.Performance };
-        scale.ScaleX=.97;
-        scale.ScaleY=.97;
+        scale.ScaleX=.985;scale.ScaleY=.985;
+        halo.Opacity=.54;
         ambientGlow.Opacity=0;
-        halo.Opacity=.24;
-        title.Opacity=0;
-        text.Opacity=0;
-        dismiss.Opacity=0;
+        seedCore.Opacity=0;sparkA.Opacity=0;sparkB.Opacity=0;
+        revealFront.Opacity=0;
+        title.Opacity=0;text.Opacity=0;dismiss.Opacity=0;
+        // A sliding soft alpha edge grows from the moon glint toward the left;
+        // the body inside the edge remains fully opaque.
+        var mask=new LinearGradientBrush {
+            StartPoint=new Point(0,0),EndPoint=new Point(1,0),
+            MappingMode=BrushMappingMode.RelativeToBoundingBox
+        };
+        var transparent=new GradientStop(Colors.Transparent,.88);
+        var solid=new GradientStop(Colors.White,1);
+        mask.GradientStops.Add(transparent);
+        mask.GradientStops.Add(solid);
+        root.OpacityMask=mask;
         window.Show();
 
-        // Phase 1: a restrained icy outline, not a blue overlay across the desktop.
-        var bloom=new DoubleAnimationUsingKeyFrames { FillBehavior=FillBehavior.HoldEnd };
-        bloom.KeyFrames.Add(new LinearDoubleKeyFrame(0,KeyTime.FromTimeSpan(TimeSpan.Zero)));
-        bloom.KeyFrames.Add(new EasingDoubleKeyFrame(.16,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(130)),
-            new CubicEase{EasingMode=EasingMode.EaseOut}));
-        bloom.KeyFrames.Add(new EasingDoubleKeyFrame(.10,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(225)),
-            new CubicEase{EasingMode=EasingMode.EaseInOut}));
-        bloom.KeyFrames.Add(new LinearDoubleKeyFrame(0,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(335))));
-        ambientGlow.BeginAnimation(UIElement.OpacityProperty,bloom);
+        // 0-130 ms: a tiny pearl of light, with two quiet satellite sparks.
+        seedCore.BeginAnimation(UIElement.OpacityProperty,Tween(0,.72,85,0));
+        seedCore.BeginAnimation(UIElement.OpacityProperty,Tween(.72,0,170,135),
+            HandoffBehavior.Compose);
+        sparkA.BeginAnimation(UIElement.OpacityProperty,Tween(0,.65,100,25));
+        sparkA.BeginAnimation(UIElement.OpacityProperty,Tween(.65,0,140,140),
+            HandoffBehavior.Compose);
+        sparkB.BeginAnimation(UIElement.OpacityProperty,Tween(0,.45,80,40));
+        sparkB.BeginAnimation(UIElement.OpacityProperty,Tween(.45,0,140,148),
+            HandoffBehavior.Compose);
 
-        // Phase 2: reveal an opaque card through an expanding soft radial light mask.
-        var mask=new RadialGradientBrush();
-        mask.MappingMode=BrushMappingMode.RelativeToBoundingBox;
-        mask.Center=new Point(.64,.56);
-        mask.GradientOrigin=mask.Center;
-        mask.RadiusX=.15;
-        mask.RadiusY=.15;
-        mask.GradientStops.Add(new GradientStop(Colors.White,0));
-        mask.GradientStops.Add(new GradientStop(Colors.White,.64));
-        mask.GradientStops.Add(new GradientStop(Colors.Transparent,1));
-        root.OpacityMask=mask;
-        var reveal=new DoubleAnimation(.15,1.65,TimeSpan.FromMilliseconds(370)){
-            EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut}
-        };
-        mask.BeginAnimation(RadialGradientBrush.RadiusXProperty,reveal);
-        mask.BeginAnimation(RadialGradientBrush.RadiusYProperty,reveal.Clone());
-        var settle=new CubicEase{EasingMode=EasingMode.EaseOut};
-        var grow=new DoubleAnimation(.97,1,TimeSpan.FromMilliseconds(350)) {
-            BeginTime=TimeSpan.FromMilliseconds(10), EasingFunction=settle
-        };
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty,grow);
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty,grow.Clone());
-        ((BlurEffect)root.Effect).BeginAnimation(BlurEffect.RadiusProperty,Fade(3,0,250,15));
+        // 80-390 ms: the luminous edge draws a real solid card right-to-left.
+        // Both alpha stops move together, retaining a narrow feathered boundary.
+        transparent.BeginAnimation(GradientStop.OffsetProperty,Tween(.88,0,365,65));
+        solid.BeginAnimation(GradientStop.OffsetProperty,Tween(1,.065,365,65));
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty,Tween(.985,1,330,80));
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty,Tween(.985,1,330,80));
 
-        // Phase 3: sequential micro-fades, legible by ~0.45 s.
-        MaterializeText(title,165,165);
-        MaterializeText(text,215,180);
-        MaterializeText(dismiss,285,135);
+        // The slender wavefront tracks the mask; unlike a bloom it cannot flood
+        // adjacent app content. The background itself stays untouched.
+        var frontTransform=new TranslateTransform();
+        revealFront.RenderTransform=frontTransform;
+        revealFront.Margin=new Thickness(0,9,0,9);
+        frontTransform.X=scene.ActualWidth-27;
+        revealFront.BeginAnimation(UIElement.OpacityProperty,Tween(0,.58,100,80));
+        frontTransform.BeginAnimation(TranslateTransform.XProperty,
+            Tween(scene.ActualWidth-27,18,350,65));
+        revealFront.BeginAnimation(UIElement.OpacityProperty,Tween(.58,0,180,300),
+            HandoffBehavior.Compose);
 
-        // A single tiny edge pulse settles to the permanent MoonGlow rim.
-        var glow=new DoubleAnimationUsingKeyFrames { FillBehavior=FillBehavior.HoldEnd };
-        glow.KeyFrames.Add(new LinearDoubleKeyFrame(.24,KeyTime.FromTimeSpan(TimeSpan.Zero)));
-        glow.KeyFrames.Add(new EasingDoubleKeyFrame(.78,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(275)),
-            new CubicEase{EasingMode=EasingMode.EaseOut}));
-        glow.KeyFrames.Add(new EasingDoubleKeyFrame(.68,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(525)),
-            new CubicEase{EasingMode=EasingMode.EaseInOut}));
-        halo.BeginAnimation(UIElement.OpacityProperty,glow);
+        // 260-550 ms: legibility is immediate after the body is revealed.
+        RevealElement(title,285,165);
+        RevealElement(text,350,170);
+        RevealElement(dismiss,410,120);
+        halo.BeginAnimation(UIElement.OpacityProperty,Tween(.35,.75,260,245));
+        halo.BeginAnimation(UIElement.OpacityProperty,Tween(.75,.58,210,430),
+            HandoffBehavior.Compose);
 
-        // Always settle to a deterministic final state on low-fps Windows desktops.
-        settleTimer=new DispatcherTimer { Interval=TimeSpan.FromMilliseconds(590) };
+        // Fail-safe final state after 700 ms. No residual masks, sparks or animations.
+        settleTimer=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(720)};
         settleTimer.Tick+=(s,e)=>{
             settleTimer.Stop();
             if(closing || !window.IsVisible)return;
-            root.BeginAnimation(UIElement.OpacityProperty,null);
+            root.OpacityMask=null;
             scale.BeginAnimation(ScaleTransform.ScaleXProperty,null);
             scale.BeginAnimation(ScaleTransform.ScaleYProperty,null);
-            ((BlurEffect)root.Effect).BeginAnimation(BlurEffect.RadiusProperty,null);
-            ambientGlow.BeginAnimation(UIElement.OpacityProperty,null);
             halo.BeginAnimation(UIElement.OpacityProperty,null);
-            root.OpacityMask=null;
-            foreach(var el in new UIElement[]{title,text,dismiss})
-                el.BeginAnimation(UIElement.OpacityProperty,null);
-            scale.ScaleX=1;scale.ScaleY=1;root.Opacity=1;
-            ((BlurEffect)root.Effect).Radius=0;
-            ambientGlow.Opacity=0;halo.Opacity=.68;
-            title.Opacity=1;text.Opacity=1;dismiss.Opacity=1;
+            scale.ScaleX=1;scale.ScaleY=1;
+            root.Opacity=1;
+            halo.Opacity=.58;
+            seedCore.Opacity=0;sparkA.Opacity=0;sparkB.Opacity=0;
+            revealFront.Opacity=0;
+            foreach(var element in new UIElement[]{title,text,dismiss}) {
+                element.BeginAnimation(UIElement.OpacityProperty,null);
+                element.Opacity=1;
+            }
         };
         settleTimer.Start();
         timer.Start();
     }
-
     internal void Close() {
         if(closing)return;
         closing=true;
@@ -393,14 +399,17 @@ internal sealed class LunaBubble
         if(settleTimer!=null)settleTimer.Stop();
         root.OpacityMask=null;
         root.BeginAnimation(UIElement.OpacityProperty,null);
+        seedCore.Opacity=0;sparkA.Opacity=0;sparkB.Opacity=0;
+        revealFront.Opacity=0;
         scale.BeginAnimation(ScaleTransform.ScaleXProperty,null);
         scale.BeginAnimation(ScaleTransform.ScaleYProperty,null);
-        var ease=new CubicEase{EasingMode=EasingMode.EaseIn};
-        var shrink=new DoubleAnimation(scale.ScaleX,.97,TimeSpan.FromMilliseconds(225)){EasingFunction=ease};
+        var shrink=new DoubleAnimation(scale.ScaleX,.985,TimeSpan.FromMilliseconds(210)){
+            EasingFunction=new CubicEase{EasingMode=EasingMode.EaseIn}
+        };
         shrink.Completed+=(s,e)=>window.Close();
         scale.BeginAnimation(ScaleTransform.ScaleXProperty,shrink);
         scale.BeginAnimation(ScaleTransform.ScaleYProperty,shrink.Clone());
         root.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(root.Opacity,0,TimeSpan.FromMilliseconds(205)){EasingFunction=ease});
+            new DoubleAnimation(root.Opacity,0,TimeSpan.FromMilliseconds(185)));
     }
 }

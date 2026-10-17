@@ -1,5 +1,5 @@
 ; Luna Notify — per-user install, no elevated permissions, no tray.
-#define AppVersion "0.6.0"
+#define AppVersion "0.7.0"
 [Setup]
 AppId={{C02E263F-5C7B-4A52-B796-671937F6E8DA}
 AppName=Luna Notify

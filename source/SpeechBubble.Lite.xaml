@@ -35,14 +35,23 @@
  </Window.Resources>
 
  <Grid x:Name="MoonScene" Margin="16" ClipToBounds="False">
-  <!-- Light condenses along the future contour. No screen-covering blue fog. -->
+  <!-- Three tiny glints converge into the solid card: delicate, not full-screen fog. -->
+  <Canvas x:Name="SeedCanvas" IsHitTestVisible="False" ClipToBounds="False" Opacity="1">
+   <Ellipse x:Name="SeedCore" Width="12" Height="12" Opacity="0">
+    <Ellipse.Fill><RadialGradientBrush><GradientStop Color="#E7FAFF" Offset="0"/><GradientStop Color="#8EDAFF" Offset=".6"/><GradientStop Color="#4BB7F4" Offset="1"/></RadialGradientBrush></Ellipse.Fill>
+    <Ellipse.Effect><DropShadowEffect Color="#73D2FF" BlurRadius="11" ShadowDepth="0" Opacity=".8"/></Ellipse.Effect>
+   </Ellipse>
+   <Ellipse x:Name="SeedSparkA" Width="3" Height="3" Fill="#C6EDFF" Opacity="0"/>
+   <Ellipse x:Name="SeedSparkB" Width="3" Height="3" Fill="#ECFCFF" Opacity="0"/>
+  </Canvas>
+  <!-- A fine luminous edge follows the forming card. Never draws a hollow frame first. -->
   <Canvas IsHitTestVisible="False" ClipToBounds="False">
    <Path x:Name="AmbientGlow" Data="{Binding Data, ElementName=BubbleOutline}" Stroke="#81D6FF" StrokeThickness="1.8"
          Opacity="0" Fill="Transparent" IsHitTestVisible="False">
-    <Path.Effect><DropShadowEffect Color="#66C6FF" BlurRadius="22" ShadowDepth="0" Opacity="0.72"/></Path.Effect>
+    <Path.Effect><DropShadowEffect Color="#66C6FF" BlurRadius="12" ShadowDepth="0" Opacity="0.45"/></Path.Effect>
    </Path>
   </Canvas>
-  <Grid x:Name="BubbleRoot" Opacity="0" ClipToBounds="False" RenderTransformOrigin="0.70,0.75">
+  <Grid x:Name="BubbleRoot" Opacity="1" ClipToBounds="False" RenderTransformOrigin="0.50,0.50">
    <Grid.CacheMode><BitmapCache/></Grid.CacheMode>
    <Grid.RenderTransform><ScaleTransform ScaleX="0.97" ScaleY="0.97"/></Grid.RenderTransform>
    <!-- The shape has no disconnected tail: this version does not use a tray anchor. -->
@@ -67,5 +76,14 @@
     <TextBlock x:Name="TaskText" Grid.Row="1" Opacity="0" Margin="0,5,0,0" TextWrapping="Wrap" TextTrimming="None" FontFamily="Segoe UI" FontSize="13" LineHeight="19" LineStackingStrategy="BlockLineHeight" Foreground="#214162"/>
    </Grid>
   </Grid>
+  <!-- Wavefront glimmer follows the reveal edge, then fades. -->
+  <Border x:Name="RevealFront" Width="2" HorizontalAlignment="Left" VerticalAlignment="Stretch" Opacity="0" IsHitTestVisible="False">
+   <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#00E5FAFF" Offset="0"/>
+    <GradientStop Color="#C5E9FF" Offset=".32"/>
+    <GradientStop Color="#D0F8FF" Offset=".5"/>
+    <GradientStop Color="#00E5FAFF" Offset="1"/>
+   </LinearGradientBrush></Border.Background>
+  </Border>
  </Grid>
 </Window>
