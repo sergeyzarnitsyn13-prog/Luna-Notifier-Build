@@ -23,6 +23,13 @@ jobs:
       - name: Validate WPF bubble
         shell: pwsh
         run: powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File scripts/Validate-Bubble.ps1
+      - name: Upload MoonGlow motion storyboard
+        uses: actions/upload-artifact@v4
+        with:
+          name: Luna-MoonGlow-Animation-Frames
+          path: animation-frames/*.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Install Inno Setup compiler
         shell: pwsh
         run: |
