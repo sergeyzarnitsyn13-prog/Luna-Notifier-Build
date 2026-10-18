@@ -230,186 +230,94 @@ internal static class Embed
 // Notification anchor is calculated entirely in WPF device-independent pixels.
 internal sealed class LunaMoon { internal void Pulse() {} }
 
+// Animation ported from Luna-MoonGlow-v10-PORTABLE-NOBUILD/source/Harness.cs
+// DisplaySpeech() and PopScale(). Same WPF keyframes and easing; only tail removed.
 internal sealed class LunaBubble
 {
     private readonly Window window;
     private readonly Grid root;
-    private readonly Grid scene;
     private readonly ScaleTransform scale;
-    private readonly WpfPath ambientGlow;
-    private readonly WpfPath halo;
-    private readonly TextBlock title;
     private readonly TextBlock text;
     private readonly Button dismiss;
-    private readonly Ellipse seedCore, sparkA, sparkB;
-    private readonly Border revealFront;
     private readonly Action onDismiss;
     private readonly DispatcherTimer timer;
-    private DispatcherTimer settleTimer;
     private bool closing;
 
     internal LunaBubble(LunaMoon moon, AlertItem item, Action closed) {
         onDismiss=closed;
-        using (var sr=new StreamReader(Embed.Get("SpeechBubbleXaml")))
+        using(var sr=new StreamReader(Embed.Get("SpeechBubbleXaml")))
             window=(Window)XamlReader.Parse(sr.ReadToEnd());
         window.MaxHeight=320;
-        scene=(Grid)window.FindName("MoonScene");
         root=(Grid)window.FindName("BubbleRoot");
         scale=(ScaleTransform)root.RenderTransform;
-        ambientGlow=(WpfPath)window.FindName("AmbientGlow");
-        halo=(WpfPath)window.FindName("MoonHalo");
-        title=(TextBlock)window.FindName("TitleText");
         text=(TextBlock)window.FindName("TaskText");
         dismiss=(Button)window.FindName("DismissButton");
-        seedCore=(Ellipse)window.FindName("SeedCore");
-        sparkA=(Ellipse)window.FindName("SeedSparkA");
-        sparkB=(Ellipse)window.FindName("SeedSparkB");
-        revealFront=(Border)window.FindName("RevealFront");
         text.Text=(item.Title.Length>0 ? item.Title+"\n" : "")+item.Body;
         dismiss.Click+=(s,e)=>Close();
-        timer=new DispatcherTimer { Interval=TimeSpan.FromSeconds(10) };
+        timer=new DispatcherTimer{Interval=TimeSpan.FromSeconds(10)};
         timer.Tick+=(s,e)=>Close();
-        window.Closed+=(s,e)=>{
-            timer.Stop();
-            if(settleTimer!=null)settleTimer.Stop();
-            onDismiss();
-        };
+        window.Closed+=(s,e)=>{timer.Stop();onDismiss();};
         window.Loaded+=(s,e)=>Position();
     }
     private void Position() {
-        // Coordinates in WPF DIPs, never mixed with Windows Forms pixels.
+        // Keep DPI-safe WPF working-area positioning from verified Luna Notify.
         window.UpdateLayout();
-        var work=SystemParameters.WorkArea;
+        var area=SystemParameters.WorkArea;
         double ww=window.Width;
         double wh=Math.Max(80,window.ActualHeight>1?window.ActualHeight:140);
         const double margin=18;
-        window.Left=Math.Max(work.Left+margin,work.Right-ww-margin);
-        window.Top=Math.Max(work.Top+margin,work.Bottom-wh-margin);
-        double rw=Math.Max(80,ww-32), rh=Math.Max(70,wh-32);
-        ((WpfPath)window.FindName("BubbleOutline")).Data=Outline(rw,rh);
-        // Origin is near the right-center, where the notification gathers.
-        double sx=rw-35, sy=rh/2;
-        Canvas.SetLeft(seedCore,sx-6);Canvas.SetTop(seedCore,sy-6);
-        Canvas.SetLeft(sparkA,sx+14);Canvas.SetTop(sparkA,sy-22);
-        Canvas.SetLeft(sparkB,sx-19);Canvas.SetTop(sparkB,sy+13);
+        window.Left=Math.Max(area.Left+margin,area.Right-ww-margin);
+        window.Top=Math.Max(area.Top+margin,area.Bottom-wh-margin);
+        double rw=Math.Max(80,ww-32),rh=Math.Max(70,wh-32);
+        var geometry=new RectangleGeometry(new Rect(0,0,rw,rh),20,20);
+        geometry.Freeze(); // no tail, only original rounded body
+        ((WpfPath)window.FindName("BubbleOutline")).Data=geometry;
     }
-    private static Geometry Outline(double w,double h) {
-        var geometry=new RectangleGeometry(new Rect(0,0,w,h),20,20);
-        geometry.Freeze();
-        return geometry;
+
+    // EXACT original v10 keyframes: 8% -> 101.8% (280ms) -> 100% (420ms).
+    private static void PopScale(ScaleTransform target,DependencyProperty property) {
+        var animation=new DoubleAnimationUsingKeyFrames();
+        animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.08,KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        animation.KeyFrames.Add(new EasingDoubleKeyFrame(1.018,
+            KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(280)),
+            new CubicEase{EasingMode=EasingMode.EaseOut}));
+        animation.KeyFrames.Add(new EasingDoubleKeyFrame(1,
+            KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)),
+            new CubicEase{EasingMode=EasingMode.EaseInOut}));
+        target.BeginAnimation(property,animation,HandoffBehavior.SnapshotAndReplace);
     }
-    private static DoubleAnimation Tween(double from,double to,int durationMs,int delayMs) {
-        return new DoubleAnimation(from,to,TimeSpan.FromMilliseconds(durationMs)) {
-            BeginTime=TimeSpan.FromMilliseconds(delayMs),
-            EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut},
-            FillBehavior=FillBehavior.HoldEnd
+    private static void Fade(UIElement target,double to,int durationMs,Action completed=null) {
+        var animation=new DoubleAnimation(target.Opacity,to,TimeSpan.FromMilliseconds(durationMs)){
+            EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut}
         };
+        if(completed!=null)animation.Completed+=(s,e)=>completed();
+        target.BeginAnimation(UIElement.OpacityProperty,animation,HandoffBehavior.SnapshotAndReplace);
     }
-    private static void RevealElement(UIElement element,int delayMs,int durationMs) {
-        element.Opacity=0;
-        element.BeginAnimation(UIElement.OpacityProperty,Tween(0,1,durationMs,delayMs));
+    private static void Tween(Animatable target,DependencyProperty property,double from,double to,int durationMs) {
+        var animation=new DoubleAnimation(from,to,TimeSpan.FromMilliseconds(durationMs)){
+            EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut}
+        };
+        target.BeginAnimation(property,animation,HandoffBehavior.SnapshotAndReplace);
     }
     internal void ShowAnimated() {
         closing=false;
-        // True opacity and solid white-blue fill: card is NEVER ghosted over the desktop.
-        root.Opacity=1;
-        scale.ScaleX=.985;scale.ScaleY=.985;
-        halo.Opacity=.54;
-        ambientGlow.Opacity=0;
-        seedCore.Opacity=0;sparkA.Opacity=0;sparkB.Opacity=0;
-        revealFront.Opacity=0;
-        title.Opacity=0;text.Opacity=0;dismiss.Opacity=0;
-        // A sliding soft alpha edge grows from the moon glint toward the left;
-        // the body inside the edge remains fully opaque.
-        var mask=new LinearGradientBrush {
-            StartPoint=new Point(0,0),EndPoint=new Point(1,0),
-            MappingMode=BrushMappingMode.RelativeToBoundingBox
-        };
-        var transparent=new GradientStop(Colors.Transparent,.88);
-        var solid=new GradientStop(Colors.White,1);
-        mask.GradientStops.Add(transparent);
-        mask.GradientStops.Add(solid);
-        root.OpacityMask=mask;
+        root.Opacity=0;
+        scale.ScaleX=.08;
+        scale.ScaleY=.08;
         window.Show();
-
-        // 0-130 ms: a tiny pearl of light, with two quiet satellite sparks.
-        seedCore.BeginAnimation(UIElement.OpacityProperty,Tween(0,.72,85,0));
-        seedCore.BeginAnimation(UIElement.OpacityProperty,Tween(.72,0,170,135),
-            HandoffBehavior.Compose);
-        sparkA.BeginAnimation(UIElement.OpacityProperty,Tween(0,.65,100,25));
-        sparkA.BeginAnimation(UIElement.OpacityProperty,Tween(.65,0,140,140),
-            HandoffBehavior.Compose);
-        sparkB.BeginAnimation(UIElement.OpacityProperty,Tween(0,.45,80,40));
-        sparkB.BeginAnimation(UIElement.OpacityProperty,Tween(.45,0,140,148),
-            HandoffBehavior.Compose);
-
-        // 80-390 ms: the luminous edge draws a real solid card right-to-left.
-        // Both alpha stops move together, retaining a narrow feathered boundary.
-        transparent.BeginAnimation(GradientStop.OffsetProperty,Tween(.88,0,365,65));
-        solid.BeginAnimation(GradientStop.OffsetProperty,Tween(1,.065,365,65));
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty,Tween(.985,1,330,80));
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty,Tween(.985,1,330,80));
-
-        // The slender wavefront tracks the mask; unlike a bloom it cannot flood
-        // adjacent app content. The background itself stays untouched.
-        var frontTransform=new TranslateTransform();
-        revealFront.RenderTransform=frontTransform;
-        revealFront.Margin=new Thickness(0,9,0,9);
-        frontTransform.X=scene.ActualWidth-27;
-        revealFront.BeginAnimation(UIElement.OpacityProperty,Tween(0,.58,100,80));
-        frontTransform.BeginAnimation(TranslateTransform.XProperty,
-            Tween(scene.ActualWidth-27,18,350,65));
-        revealFront.BeginAnimation(UIElement.OpacityProperty,Tween(.58,0,180,300),
-            HandoffBehavior.Compose);
-
-        // 260-550 ms: legibility is immediate after the body is revealed.
-        RevealElement(title,285,165);
-        RevealElement(text,350,170);
-        RevealElement(dismiss,410,120);
-        halo.BeginAnimation(UIElement.OpacityProperty,Tween(.35,.75,260,245));
-        halo.BeginAnimation(UIElement.OpacityProperty,Tween(.75,.58,210,430),
-            HandoffBehavior.Compose);
-
-        // Fail-safe final state after 700 ms. No residual masks, sparks or animations.
-        settleTimer=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(720)};
-        settleTimer.Tick+=(s,e)=>{
-            settleTimer.Stop();
-            if(closing || !window.IsVisible)return;
-            root.OpacityMask=null;
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty,null);
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty,null);
-            halo.BeginAnimation(UIElement.OpacityProperty,null);
-            scale.ScaleX=1;scale.ScaleY=1;
-            root.Opacity=1;
-            halo.Opacity=.58;
-            seedCore.Opacity=0;sparkA.Opacity=0;sparkB.Opacity=0;
-            revealFront.Opacity=0;
-            foreach(var element in new UIElement[]{title,text,dismiss}) {
-                element.BeginAnimation(UIElement.OpacityProperty,null);
-                element.Opacity=1;
-            }
-        };
-        settleTimer.Start();
+        // EXACT original v10 DisplaySpeech() invocation.
+        PopScale(scale,ScaleTransform.ScaleXProperty);
+        PopScale(scale,ScaleTransform.ScaleYProperty);
+        Fade(root,1,160);
         timer.Start();
     }
     internal void Close() {
         if(closing)return;
         closing=true;
         timer.Stop();
-        if(settleTimer!=null)settleTimer.Stop();
-        root.OpacityMask=null;
-        root.BeginAnimation(UIElement.OpacityProperty,null);
-        seedCore.Opacity=0;sparkA.Opacity=0;sparkB.Opacity=0;
-        revealFront.Opacity=0;
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty,null);
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty,null);
-        var shrink=new DoubleAnimation(scale.ScaleX,.985,TimeSpan.FromMilliseconds(210)){
-            EasingFunction=new CubicEase{EasingMode=EasingMode.EaseIn}
-        };
-        shrink.Completed+=(s,e)=>window.Close();
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty,shrink);
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty,shrink.Clone());
-        root.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(root.Opacity,0,TimeSpan.FromMilliseconds(185)));
+        // EXACT v10 CloseBubble() motion; no new visual effects.
+        Tween(scale,ScaleTransform.ScaleXProperty,scale.ScaleX,.82,150);
+        Tween(scale,ScaleTransform.ScaleYProperty,scale.ScaleY,.82,150);
+        Fade(root,0,150,()=>window.Close());
     }
 }

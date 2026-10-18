@@ -7,7 +7,7 @@ try {
   $xamlPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'source\SpeechBubble.Lite.xaml'
   $xaml = [System.IO.File]::ReadAllText($xamlPath, [System.Text.Encoding]::UTF8)
   $window = [System.Windows.Markup.XamlReader]::Parse($xaml)
-  foreach ($name in @('BubbleRoot','BubbleOutline','AmbientGlow','MoonHalo','TitleText','TaskText','DismissButton','MoonScene','SeedCore','SeedSparkA','SeedSparkB','RevealFront')) {
+  foreach ($name in @('BubbleRoot','BubbleOutline','TaskText','DismissButton')) {
     $element = $window.FindName($name)
     if ($null -eq $element) { throw "XAML name cannot be resolved: $name" }
     Write-Host "Found $name : $($element.GetType().FullName)"
@@ -16,9 +16,10 @@ try {
   if ($null -eq $root.RenderTransform -or $root.RenderTransform.GetType().Name -ne 'ScaleTransform') {
     throw 'BubbleRoot must have a ScaleTransform'
   }
-  $ambient=$window.FindName('AmbientGlow')
-  if ($ambient.GetType().FullName -ne 'System.Windows.Shapes.Path') { throw 'Ambient glow must be a thin stroked contour, not an ellipse fog' }
-  if ($ambient.Fill.ToString() -ne '#00FFFFFF') { Write-Host "Ambient fill=$($ambient.Fill) (outline-only glow)" }
+  if ([Math]::Abs($root.RenderTransform.ScaleX-0.08) -gt 0.001) { throw 'Original 8 percent start scale missing' }
+  if ($xaml -match 'SeedCore|RevealFront|MoonScene') { throw 'Experimental MoonGlow 0.7 visual elements still present' }
+  if ($xaml -match 'SnoozeButton|DoneButton') { throw 'Chat-specific actions must not be in the notifier' }
+  Write-Host "Original MoonGlow v10 popup animation restored (tail-free)"
   Write-Host "WPF markup parse PASSED"
   $exe = Join-Path (Split-Path $PSScriptRoot -Parent) 'bin\Release\Luna.Notify.exe'
   $assembly = [System.Reflection.Assembly]::LoadFrom($exe)
@@ -80,9 +81,8 @@ try {
   }
   $visibleWindow.Close()
   $app.Shutdown()
-  if ($null -eq $visibleWindow.FindName('MoonHalo') -or $null -eq $visibleWindow.FindName('AmbientGlow')) { throw 'Missing materialization elements' }
-  if ($null -ne $visibleWindow.FindName('SeedCore') -and $null -ne $visibleWindow.FindName('RevealFront')) { Write-Host "MoonGlow gathering animation elements PASSED" } else { throw 'Missing MoonGlow gathering elements' }
-  Write-Host "MoonGlow animation elements PASSED"
+  if ($null -eq $visibleWindow.FindName('BubbleOutline')) { throw 'Bubble geometry missing' }
+  Write-Host "Tail-free original MoonGlow v10 bubble PASSED"
   Write-Host "Compiled bubble ShowAnimated PASSED"
   Write-Host "WPF bubble XAML validation PASSED"
   $window.Close()

@@ -2,7 +2,7 @@
  Width="420" MaxWidth="420" SizeToContent="Height" Opacity="1" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
  ResizeMode="NoResize" ShowInTaskbar="False" ShowActivated="False" Topmost="True" UseLayoutRounding="True">
  <Window.Resources>
-  <!-- Approved Moon Glow surface: almost white, only a very light icy-blue falloff. -->
+  <!-- Original approved MoonGlow v10 surface — unchanged. -->
   <LinearGradientBrush x:Key="MoonWhiteSurface" StartPoint="0,0" EndPoint="1,1">
    <GradientStop Color="#FFFFFF" Offset="0"/>
    <GradientStop Color="#FCFEFF" Offset="0.30"/>
@@ -33,57 +33,30 @@
    </ControlTemplate></Setter.Value></Setter>
   </Style>
  </Window.Resources>
-
- <Grid x:Name="MoonScene" Margin="16" ClipToBounds="False">
-  <!-- Three tiny glints converge into the solid card: delicate, not full-screen fog. -->
-  <Canvas x:Name="SeedCanvas" IsHitTestVisible="False" ClipToBounds="False" Opacity="1">
-   <Ellipse x:Name="SeedCore" Width="12" Height="12" Opacity="0">
-    <Ellipse.Fill><RadialGradientBrush><GradientStop Color="#E7FAFF" Offset="0"/><GradientStop Color="#8EDAFF" Offset=".6"/><GradientStop Color="#4BB7F4" Offset="1"/></RadialGradientBrush></Ellipse.Fill>
-    <Ellipse.Effect><DropShadowEffect Color="#73D2FF" BlurRadius="11" ShadowDepth="0" Opacity=".8"/></Ellipse.Effect>
-   </Ellipse>
-   <Ellipse x:Name="SeedSparkA" Width="3" Height="3" Fill="#C6EDFF" Opacity="0"/>
-   <Ellipse x:Name="SeedSparkB" Width="3" Height="3" Fill="#ECFCFF" Opacity="0"/>
-  </Canvas>
-  <!-- A fine luminous edge follows the forming card. Never draws a hollow frame first. -->
+ <Grid x:Name="BubbleRoot" Margin="16" Opacity="0" ClipToBounds="False">
+  <Grid.CacheMode><BitmapCache/></Grid.CacheMode>
+  <Grid.RenderTransform><ScaleTransform ScaleX="0.08" ScaleY="0.08"/></Grid.RenderTransform>
+  <!-- Original MoonGlow v10 shadow, halo, rim and opaque body. Only the tail geometry is removed. -->
   <Canvas IsHitTestVisible="False" ClipToBounds="False">
-   <Path x:Name="AmbientGlow" Data="{Binding Data, ElementName=BubbleOutline}" Stroke="#81D6FF" StrokeThickness="1.8"
-         Opacity="0" Fill="Transparent" IsHitTestVisible="False">
-    <Path.Effect><DropShadowEffect Color="#66C6FF" BlurRadius="12" ShadowDepth="0" Opacity="0.45"/></Path.Effect>
+   <Path Data="{Binding Data, ElementName=BubbleOutline}" Fill="#F4FAFF" IsHitTestVisible="False">
+    <Path.Effect><DropShadowEffect Color="#305A82" BlurRadius="18" ShadowDepth="4" Opacity="0.14"/></Path.Effect>
    </Path>
+   <Path Data="{Binding Data, ElementName=BubbleOutline}" Stroke="#87D6FF" StrokeThickness="2.40" IsHitTestVisible="False">
+    <Path.Effect><DropShadowEffect Color="#56CAFF" BlurRadius="29" ShadowDepth="0" Opacity="0.92"/></Path.Effect>
+   </Path>
+   <Path Data="{Binding Data, ElementName=BubbleOutline}" Stroke="#C8F4FF" StrokeThickness="0.98" IsHitTestVisible="False" Opacity="0.94"/>
+   <Path x:Name="BubbleOutline" Fill="{StaticResource MoonWhiteSurface}" Stroke="#D9F2FF" StrokeThickness="0.78" IsHitTestVisible="False"/>
   </Canvas>
-  <Grid x:Name="BubbleRoot" Opacity="1" ClipToBounds="False" RenderTransformOrigin="0.50,0.50">
-   <Grid.CacheMode><BitmapCache/></Grid.CacheMode>
-   <Grid.RenderTransform><ScaleTransform ScaleX="0.97" ScaleY="0.97"/></Grid.RenderTransform>
-   <!-- The shape has no disconnected tail: this version does not use a tray anchor. -->
-   <Canvas IsHitTestVisible="False" ClipToBounds="False">
-    <Path Data="{Binding Data, ElementName=BubbleOutline}" Fill="#F4FAFF" IsHitTestVisible="False">
-     <Path.Effect><DropShadowEffect Color="#305A82" BlurRadius="18" ShadowDepth="3" Opacity="0.14"/></Path.Effect>
-    </Path>
-    <Path x:Name="MoonHalo" Data="{Binding Data, ElementName=BubbleOutline}" Stroke="#8BDFFF" StrokeThickness="1.75" Opacity="0.70" IsHitTestVisible="False">
-     <Path.Effect><DropShadowEffect Color="#56C7FF" BlurRadius="26" ShadowDepth="0" Opacity="0.72"/></Path.Effect>
-    </Path>
-    <Path Data="{Binding Data, ElementName=BubbleOutline}" Stroke="#D9F6FF" StrokeThickness="0.85" Opacity="0.85" IsHitTestVisible="False"/>
-    <Path x:Name="BubbleOutline" Fill="{StaticResource MoonWhiteSurface}" Stroke="#CFEFFF" StrokeThickness="0.88" IsHitTestVisible="False"/>
-   </Canvas>
-   <Grid Margin="18,14,18,16">
-    <Grid.RowDefinitions><RowDefinition Height="27"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-    <Grid>
-     <TextBlock x:Name="TitleText" Text="Luna" Opacity="0" FontSize="16" FontWeight="SemiBold" Foreground="#123E74" VerticalAlignment="Center"/>
-     <Button x:Name="DismissButton" Opacity="0" Width="22" Height="22" Padding="6" HorizontalAlignment="Right" Style="{StaticResource QuietAction}" ToolTip="Закрыть" AutomationProperties.Name="Закрыть реплику">
-      <Path Data="M 1,1 L 9,9 M 9,1 L 1,9" Stroke="#748EAE" StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="9" Height="9" Stretch="Uniform"/>
-     </Button>
-    </Grid>
-    <TextBlock x:Name="TaskText" Grid.Row="1" Opacity="0" Margin="0,5,0,0" TextWrapping="Wrap" TextTrimming="None" FontFamily="Segoe UI" FontSize="13" LineHeight="19" LineStackingStrategy="BlockLineHeight" Foreground="#214162"/>
+  <!-- Reduced from the v10 chat-specific action row: notification retains original typography. -->
+  <Grid Margin="18,13,18,15">
+   <Grid.RowDefinitions><RowDefinition Height="27"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <Grid>
+    <TextBlock Text="Luna" FontSize="16" FontWeight="SemiBold" Foreground="#123E74" VerticalAlignment="Center"/>
+    <Button x:Name="DismissButton" Width="22" Height="22" Padding="6" HorizontalAlignment="Right" Style="{StaticResource QuietAction}" ToolTip="Закрыть" AutomationProperties.Name="Закрыть реплику">
+     <Path Data="M 1,1 L 9,9 M 9,1 L 1,9" Stroke="#748EAE" StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="9" Height="9" Stretch="Uniform"/>
+    </Button>
    </Grid>
+   <TextBlock x:Name="TaskText" Grid.Row="1" Margin="0,5,0,0" TextWrapping="Wrap" TextTrimming="None" FontFamily="Segoe UI" FontSize="13" LineHeight="19" LineStackingStrategy="BlockLineHeight" Foreground="#214162"/>
   </Grid>
-  <!-- Wavefront glimmer follows the reveal edge, then fades. -->
-  <Border x:Name="RevealFront" Width="2" HorizontalAlignment="Left" VerticalAlignment="Stretch" Opacity="0" IsHitTestVisible="False">
-   <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-    <GradientStop Color="#00E5FAFF" Offset="0"/>
-    <GradientStop Color="#C5E9FF" Offset=".32"/>
-    <GradientStop Color="#D0F8FF" Offset=".5"/>
-    <GradientStop Color="#00E5FAFF" Offset="1"/>
-   </LinearGradientBrush></Border.Background>
-  </Border>
  </Grid>
 </Window>
