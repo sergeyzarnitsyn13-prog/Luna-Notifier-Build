@@ -23,6 +23,38 @@ jobs:
       - name: Validate WPF bubble
         shell: pwsh
         run: powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File scripts/Validate-Bubble.ps1
+      - name: Smoke test local Systematic bridge
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $app=Start-Process -FilePath (Resolve-Path 'bin/Release/Luna.Notify.exe') -PassThru
+          $origin='https://d5d8gka87mlca0b3tv6e.6brbn2wz.apigw.yandexcloud.net'
+          $uri='http://127.0.0.1:58731'
+          try {
+            Start-Sleep -Seconds 1
+            $health=Invoke-RestMethod "$uri/v1/health" -Headers @{ Origin=$origin } -TimeoutSec 3
+            if(-not $health.ok -or $health.version -ne '0.9'){throw 'Health check failed'}
+            $state=@{employeeName='Тестовый сотрудник';sessionId='local-test';todos=@(
+              @{id='task-1';remindAt=([DateTimeOffset]::UtcNow.AddMinutes(3).ToString('o'));actionText='Проверить заказ';clientName='Тестовый клиент'}
+            )} | ConvertTo-Json -Depth 6 -Compress
+            $payload=[Text.Encoding]::UTF8.GetBytes($state)
+            $response=Invoke-RestMethod "$uri/v1/state" -Method Post -Headers @{ Origin=$origin } -ContentType 'application/json; charset=utf-8' -Body $payload -TimeoutSec 3
+            if(-not $response.ok){throw 'Task sync failed'}
+            $mail=@{employeeName='Тестовый сотрудник';slotLabel='14:00–15:00';storageKey='test-mail-1'} | ConvertTo-Json -Compress
+            $response=Invoke-RestMethod "$uri/v1/mail-notification" -Method Post -Headers @{ Origin=$origin } -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($mail)) -TimeoutSec 3
+            if(-not $response.ok){throw 'Mail notification failed'}
+            $pending=Invoke-RestMethod "$uri/v1/pending-todos" -Headers @{ Origin=$origin } -TimeoutSec 3
+            if($pending.todos.Count -ne 0){throw 'Unexpected pending local-origin todos'}
+            try{
+              $bad=Invoke-WebRequest "$uri/v1/health" -Headers @{ Origin='https://untrusted.example' } -SkipHttpErrorCheck -TimeoutSec 3
+              if($bad.StatusCode -ne 403){throw 'Untrusted origin was accepted'}
+            } catch {
+              if($_.Exception.Message -notmatch '403'){throw}
+            }
+            Write-Host 'Luna localhost bridge smoke test PASSED (tasks, mail, no write actions, origin check)'
+          } finally {
+            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+          }
       - name: Upload MoonGlow motion storyboard
         uses: actions/upload-artifact@v4
         with:
