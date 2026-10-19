@@ -21,7 +21,7 @@ using WpfPath = System.Windows.Shapes.Path;
 
 internal sealed class AlertItem { internal string Id, Title, Body, Source; }
 
-internal sealed class LunaApp : IDisposable
+internal sealed partial class LunaApp : IDisposable
 {
     private const int Port = 58731;
     private const string TestPath = "/luna/test";
@@ -74,6 +74,7 @@ internal sealed class LunaApp : IDisposable
             listener=null;
             Report("Listener",ex);
         }
+        InitializeLocalBridge();
         // First installation preview only; Windows logon never produces an unsolicited demo.
         if (showPreview) {
             launchPreviewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
@@ -110,75 +111,7 @@ internal sealed class LunaApp : IDisposable
             ThreadPool.QueueUserWorkItem(s=>HandleClient((TcpClient)s),client);
         }
     }
-    private void HandleClient(TcpClient client) {
-        using(client) {
-            client.ReceiveTimeout=2200;client.SendTimeout=2200;
-            try {
-                using(var stream=client.GetStream()) {
-                    // Plain-text local HTTP, never exposed on a network interface.
-                    using(var reader=new StreamReader(stream,new UTF8Encoding(false),false,1024,true)) {
-                        var start=reader.ReadLine();
-                        if(start==null || start.Length>160) {Write(stream,400,false,false);return;}
-                        var isOptions=start=="OPTIONS /luna/test HTTP/1.1";
-                        var isPost=start=="POST /luna/test HTTP/1.1";
-                        if(!isOptions && !isPost) {Write(stream,404,false,false);return;}
-                        string origin=null,host=null,contentLength=null;
-                        int total=0;
-                        for(int i=0;i<40;i++) {
-                            var line=reader.ReadLine();
-                            if(line==null) return;
-                            total+=line.Length;
-                            if(line.Length>1000 || total>4096) {Write(stream,431,false,false);return;}
-                            if(line.Length==0)break;
-                            var colon=line.IndexOf(':');
-                            if(colon<1)continue;
-                            var name=line.Substring(0,colon).Trim().ToLowerInvariant();
-                            var value=line.Substring(colon+1).Trim();
-                            if(name=="origin")origin=value;
-                            if(name=="host")host=value;
-                            if(name=="content-length")contentLength=value;
-                        }
-                        // The browser is not trusted as employee identity in general, this is ONLY
-                        // a local, fixed-text visual test. It does not handle tasks or account data.
-                        bool valid = origin == TrustedOrigin && host == "127.0.0.1:58731" &&
-                                     (contentLength==null || contentLength=="0");
-                        if(!valid) {Write(stream,403,false,false);return;}
-                        if(isOptions) {Write(stream,204,true,true);return;}
-                        bool tooSoon;
-                        lock(gate) {
-                            var now=DateTime.UtcNow.Ticks;
-                            tooSoon=now-lastTestTicks<TimeSpan.FromSeconds(2).Ticks;
-                            if(!tooSoon)lastTestTicks=now;
-                        }
-                        if(tooSoon) {Write(stream,429,true,false);return;}
-                        app.Dispatcher.BeginInvoke(new Action(ShowTest));
-                        Write(stream,200,true,false);
-                    }
-                }
-            } catch (IOException) {} catch (ObjectDisposedException) {}
-            catch (Exception) {} // no secrets or personal data to log
-        }
-    }
-    private static void Write(NetworkStream stream,int code,bool allowed,bool preflight) {
-        string status=code==200?"200 OK":code==204?"204 No Content":code==403?"403 Forbidden":
-            code==429?"429 Too Many Requests":code==431?"431 Request Header Fields Too Large":"404 Not Found";
-        string body=code==204?"":"{\"ok\":"+(code==200?"true":"false")+"}";
-        string headers="HTTP/1.1 "+status+"\r\n"+
-            "Content-Type: application/json; charset=utf-8\r\n"+
-            "Cache-Control: no-store\r\n"+
-            "Connection: close\r\n"+
-            "Content-Length: "+Encoding.UTF8.GetByteCount(body)+"\r\n";
-        if(allowed) {
-            headers+="Access-Control-Allow-Origin: "+TrustedOrigin+"\r\n"+
-                "Access-Control-Allow-Methods: POST, OPTIONS\r\n"+
-                "Access-Control-Allow-Headers: Content-Type\r\n"+
-                "Access-Control-Allow-Private-Network: true\r\n"+
-                "Vary: Origin\r\n";
-        }
-        headers+="\r\n";
-        byte[] bytes=Encoding.UTF8.GetBytes(headers+body);
-        stream.Write(bytes,0,bytes.Length);stream.Flush();
-    }
+    private void HandleClient(TcpClient client) { HandleBridgeRequest(client); }
     private static void Report(string where,Exception ex) {
         try {
             string dir=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Rusklimat IM", "Luna Notify");
@@ -203,12 +136,14 @@ internal sealed class LunaApp : IDisposable
         if(exiting)return;
         exiting=true;
         if(launchPreviewTimer!=null)launchPreviewTimer.Stop();
+        if(localTaskTimer!=null)localTaskTimer.Stop();
         try {if(listener!=null)listener.Stop();}catch{}
         if(current!=null)current.Close();
         app.Shutdown();
     }
     public void Dispose() {
         if (launchPreviewTimer != null) launchPreviewTimer.Stop();
+        if (localTaskTimer != null) localTaskTimer.Stop();
         if (listener != null) { try { listener.Stop(); } catch {} }
         if (ownsMutex) { try { mutex.ReleaseMutex(); } catch {} ownsMutex=false; }
         mutex.Dispose();
